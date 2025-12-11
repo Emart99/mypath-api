@@ -18,13 +18,14 @@ public class SecurityConfiguration {
     private JwtAuthFilter jwtAuthFilter;
     @Autowired
     private AuthenticationProvider authProvider;
+    @Autowired
+    private com.mypath.backend.security.RateLimitFilter rateLimitFilter; // Inject your rate limit filter
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception
     {
         return http
-                .csrf(csrf ->
-                        csrf
-                                .disable())
+                .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authRequest ->
                         authRequest
                                 .requestMatchers("/auth/**").permitAll()
@@ -34,6 +35,7 @@ public class SecurityConfiguration {
                         sessionManager
                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authProvider)
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class) // Add BEFORE JWT filter
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
