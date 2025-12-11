@@ -3,6 +3,7 @@ package com.mypath.backend.user;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -12,12 +13,14 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 
-@Getter@Setter@AllArgsConstructor
+@Getter
+@Setter
+@Entity
 @Table(name="user", uniqueConstraints = {@UniqueConstraint(columnNames = {"username"})})
 public class User implements UserDetails {
     @Id
     @GeneratedValue(strategy= GenerationType.AUTO)
-    private String id;
+    private Integer id;
     private String username;
     private String password;
     private String email;
@@ -31,21 +34,34 @@ public class User implements UserDetails {
     private Date updatedAt;
     private Role role;
 
-    public User(User _user) {
-        this.username = _user.username;
-        this.password = _user.password;
-        this.email = _user.email;
-        this.firstName = _user.firstName;
-        this.lastName = _user.lastName;
-        this.phone = _user.phone;
-        this.bio = _user.bio;
-        this.imageUrl = _user.imageUrl;
-        this.visibility = _user.visibility;
-        this.createdAt = _user.createdAt;
-        this.updatedAt = _user.updatedAt;
-        this.role = _user.role;
+    public User(String username,
+                String password,
+                String email,
+                String firstName,
+                String lastName,
+                String phone,
+                String bio,
+                String imageUrl,
+                Boolean visibility,
+                Date createdAt,
+                Date updatedAt,
+                Role role) {
+        this.username = username;
+        this.password = password;
+        this.email = email;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.phone = phone;
+        this.bio = bio;
+        this.imageUrl = imageUrl;
+        this.visibility = visibility;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+        this.role = role;
     }
-    
+    public User() {}
+
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority((role.name())));

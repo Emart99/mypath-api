@@ -4,26 +4,25 @@ import com.mypath.backend.jwt.JwtService;
 import com.mypath.backend.user.Role;
 import com.mypath.backend.user.User;
 import com.mypath.backend.user.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
 public class AuthService {
-    @Autowired
-    private UserRepository userRepository;
-    @Autowired
-    private JwtService jwtService;
-    @Autowired
-    private AuthenticationManager authenticationManager;
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+    private final UserRepository userRepository;
+    private final JwtService jwtService;
+    private final AuthenticationManager authenticationManager;
+
+    public AuthService(UserRepository userRepository,JwtService jwtService, AuthenticationManager authenticationManager) {
+        this.userRepository = userRepository;
+        this.jwtService = jwtService;
+        this.authenticationManager = authenticationManager;
+    }
 
     public AuthResponse register(RegisterRequestDTO registerRequest) {
         User _user = new User(
@@ -32,7 +31,6 @@ public class AuthService {
                 registerRequest.getEmail(),
                 registerRequest.getFirstName(),
                 registerRequest.getLastName(),
-                registerRequest.getPhone(),
                 registerRequest.getPhone(),
                 registerRequest.getBio(),
                 registerRequest.getImageUrl(),

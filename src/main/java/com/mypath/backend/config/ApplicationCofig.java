@@ -1,7 +1,6 @@
 package com.mypath.backend.config;
 
 import com.mypath.backend.user.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -15,12 +14,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
 public class ApplicationCofig {
-    @Autowired
-    public UserRepository userRepository;
 
+    private final UserRepository userRepository;
+
+    public ApplicationCofig(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
     {
         return config.getAuthenticationManager();
     }
