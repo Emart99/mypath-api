@@ -8,6 +8,8 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -17,17 +19,19 @@ public class AuthService {
     private final UserRepository userRepository;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final PasswordEncoder passwordEncoder;
 
-    public AuthService(UserRepository userRepository,JwtService jwtService, AuthenticationManager authenticationManager) {
+    public AuthService(UserRepository userRepository,JwtService jwtService, AuthenticationManager authenticationManager, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
+        this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
     public AuthResponse register(RegisterRequestDTO registerRequest) {
         User _user = new User(
                 registerRequest.getUsername(),
-                registerRequest.getPassword(),
+                passwordEncoder.encode(registerRequest.getPassword()),
                 registerRequest.getEmail(),
                 registerRequest.getFirstName(),
                 registerRequest.getLastName(),

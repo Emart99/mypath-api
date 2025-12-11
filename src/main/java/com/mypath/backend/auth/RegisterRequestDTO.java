@@ -20,7 +20,7 @@ public class RegisterRequestDTO {
     private Date updatedAt;
     private Role role;
 
-    public RegisterRequestDTO(String username, String password, String email, String bornDate, String firstName, String lastName, String phone, String bio, String imageUrl, Boolean visibility, Role role) {
+    public RegisterRequestDTO(String username, String password, String email, String firstName, String lastName, String phone, String bio, String imageUrl, Boolean visibility) {
         this.username = username;
         this.password = password;
         this.email = email;
