@@ -23,9 +23,6 @@ public class Idea {
     private Date modifiedDate;
     @OneToOne(cascade = CascadeType.ALL)
     private IdeaContent content;
-    @ManyToOne
-    @JoinColumn(name="user_id")
-    private User owner;
     @OneToMany(mappedBy = "idea")
     List<PathIdea> pathIdea;
 

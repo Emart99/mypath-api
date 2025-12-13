@@ -1,5 +1,6 @@
 package com.mypath.backend.path;
 
+import com.mypath.backend.user.User;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -20,7 +21,9 @@ public class Path {
     private String visibility;
     private Date creationDate;
     private Date modifiedDate;
-
+    @ManyToOne
+    @JoinColumn(name="user_id")
+    private User owner;
 
     @OneToMany(mappedBy = "path")
     private List<PathIdea> pathIdea;

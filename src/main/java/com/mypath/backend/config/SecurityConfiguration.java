@@ -1,5 +1,6 @@
 package com.mypath.backend.config;
 
+import com.mypath.backend.jwt.JwtAuthEntryPoint;
 import com.mypath.backend.jwt.JwtAuthFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -20,6 +21,8 @@ public class SecurityConfiguration {
     private AuthenticationProvider authProvider;
     @Autowired
     private com.mypath.backend.security.RateLimitFilter rateLimitFilter; // Inject your rate limit filter
+    @Autowired
+    private JwtAuthEntryPoint authEntryPoint;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception
@@ -30,6 +33,9 @@ public class SecurityConfiguration {
                         authRequest
                                 .requestMatchers("/api/auth/**").permitAll()
                                 .anyRequest().authenticated()
+                )
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(authEntryPoint)
                 )
                 .sessionManagement(sessionManager->
                         sessionManager

@@ -1,6 +1,8 @@
 package com.mypath.backend.user;
 
 import com.mypath.backend.path.Idea;
+import com.mypath.backend.path.Path;
+import com.mypath.backend.subscription.Subscription;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -36,8 +38,10 @@ public class User implements UserDetails {
     private Date createdAt;
     private Date updatedAt;
     @OneToMany(mappedBy="owner")
-    private List<Idea> ideas;
+    private List<Path> paths;
     private Role role;
+    @OneToOne(cascade = CascadeType.ALL)
+    private Subscription subscription;
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
