@@ -1,5 +1,6 @@
 package com.mypath.backend.user;
 
+import com.mypath.backend.path.Idea;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -34,7 +35,8 @@ public class User implements UserDetails {
     private Boolean visibility;
     private Date createdAt;
     private Date updatedAt;
-
+    @OneToMany(mappedBy="owner")
+    private List<Idea> ideas;
     private Role role;
 
     @Override

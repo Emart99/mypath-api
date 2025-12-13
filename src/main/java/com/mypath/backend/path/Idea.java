@@ -1,0 +1,32 @@
+package com.mypath.backend.path;
+
+import com.mypath.backend.user.User;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.util.Date;
+import java.util.List;
+
+@Entity
+@Getter
+@Setter
+@NoArgsConstructor
+public class Idea {
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private Integer id;
+    private String title;
+    private String type;
+    private Date createdDate;
+    private Date modifiedDate;
+    @OneToOne(cascade = CascadeType.ALL)
+    private IdeaContent content;
+    @ManyToOne
+    @JoinColumn(name="user_id")
+    private User owner;
+    @OneToMany(mappedBy = "idea")
+    List<PathIdea> pathIdea;
+
+}

@@ -29,12 +29,12 @@ public class RateLimitFilter implements Filter {
         String ip = req.getRemoteAddr();
         String path = req.getRequestURI();
 
-        if (path.startsWith("/auth/")) {
+        if (path.startsWith("/api/auth/")) {
             Bucket bucket = switch (path) {
-                case "/auth/login" -> rateLimiterService.resolveBucket(
+                case "/api/auth/login" -> rateLimiterService.resolveBucket(
                         ip + ":login", 10, 10, Duration.ofMinutes(1)
                 );
-                case "/auth/register" -> rateLimiterService.resolveBucket(
+                case "/api/auth/register" -> rateLimiterService.resolveBucket(
                         ip + ":register", 3, 3, Duration.ofMinutes(1)
                 );
                 default -> null;
