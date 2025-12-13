@@ -5,7 +5,7 @@ import com.mypath.backend.jwt.JwtService;
 import com.mypath.backend.user.Role;
 import com.mypath.backend.user.User;
 import com.mypath.backend.user.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.transaction.Transactional;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -13,7 +13,9 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -21,12 +23,14 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final PasswordEncoder passwordEncoder;
+    private final RefreshTokenRepository refreshTokenRepository;
 
-    public AuthService(UserRepository userRepository, JwtService jwtService, AuthenticationManager authenticationManager, PasswordEncoder passwordEncoder) {
+    public AuthService(UserRepository userRepository, JwtService jwtService, AuthenticationManager authenticationManager, PasswordEncoder passwordEncoder, RefreshTokenRepository refreshTokenRepository) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
         this.passwordEncoder = passwordEncoder;
+        this.refreshTokenRepository = refreshTokenRepository;
     }
 
     public AuthResponse register(RegisterRequestDTO registerRequest) {
@@ -53,21 +57,56 @@ public class AuthService {
         user.setRole(Role.USER);
 
         userRepository.save(user);
-        return new AuthResponse(jwtService.getToken(user));
+        RefreshToken refreshToken = createRefreshToken(user);
+        return new AuthResponse(jwtService.getToken(user),refreshToken.getToken());
     }
 
     public AuthResponse login(LoginRequestDTO request) {
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
+                new UsernamePasswordAuthenticationToken(
+                        request.getUsername(),
+                        request.getPassword()
+                )
         );
 
-        UserDetails user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + request.getUsername()));
+        User user = userRepository.findByUsername(request.getUsername())
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
-        return new AuthResponse(jwtService.getToken(user));
+        String accessToken = jwtService.getToken(user);
+        RefreshToken refreshToken = createRefreshToken(user);
+
+        return new AuthResponse(accessToken, refreshToken.getToken());
+
     }
 
-    public List<User> getAllUsers(){
-        return userRepository.findAll();
+    public AuthResponse refresh(RefreshTokenRequestDTO request) {
+        RefreshToken refreshToken = refreshTokenRepository
+                .findByToken(request.getRefreshToken())
+                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
+
+        if (refreshToken.getExpiresAt().isBefore(Instant.now())) {
+            throw new RuntimeException("Refresh token expired");
+        }
+
+        User user = refreshToken.getUser();
+        String accessToken = jwtService.getToken(user);
+
+        return new AuthResponse(accessToken, refreshToken.getToken());
     }
+
+
+
+    public RefreshToken createRefreshToken(User user) {
+        RefreshToken rt = new RefreshToken();
+        rt.setUser(user);
+        rt.setToken(UUID.randomUUID().toString());
+        rt.setExpiresAt(Instant.now().plus(30, ChronoUnit.DAYS));
+        return refreshTokenRepository.save(rt);
+
+    }
+    @Transactional
+    public void logout(RefreshTokenRequestDTO request) {
+        refreshTokenRepository.deleteByToken(request.getRefreshToken());
+    }
+
 }
