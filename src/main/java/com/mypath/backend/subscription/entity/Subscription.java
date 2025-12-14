@@ -4,10 +4,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
 import java.util.Date;
 import java.util.List;
-import java.util.UUID;
 
 @Entity
 @Getter @Setter
@@ -15,7 +13,7 @@ import java.util.UUID;
 public class Subscription {
     @Id
     @GeneratedValue(strategy= GenerationType.AUTO)
-    private UUID id;
+    private Long id;
     private Date startDate;
     private Date endDate;
     private String status;

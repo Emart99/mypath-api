@@ -1,7 +1,6 @@
 package com.mypath.backend.security.config;
 
 import com.mypath.backend.user.repository.UserRepository;
-import jakarta.transaction.Transactional;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -23,7 +22,6 @@ public class ApplicationConfig {
     }
 
     @Bean
-    @Transactional
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
     {
         return config.getAuthenticationManager();
@@ -45,6 +43,6 @@ public class ApplicationConfig {
     @Bean
     public UserDetailsService userDetailService() {
         return username -> userRepository.findByUsername(username)
-                .orElseThrow(()-> new UsernameNotFoundException("User not fournd"));
+                .orElseThrow(()-> new UsernameNotFoundException("User not found"));
     }
 }
