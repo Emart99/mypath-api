@@ -35,7 +35,7 @@ public class RateLimitFilter implements Filter {
                         ip + ":login", 10, 10, Duration.ofMinutes(1)
                 );
                 case "/api/auth/register" -> rateLimiterService.resolveBucket(
-                        ip + ":register", 3, 3, Duration.ofMinutes(1)
+                        ip + ":register", 10, 10, Duration.ofMinutes(1)
                 );
                 default -> null;
             };

@@ -41,8 +41,8 @@ public class User implements UserDetails {
     @OneToMany(mappedBy="owner")
     private List<Path> paths;
     private Role role;
-    @OneToOne(cascade = CascadeType.ALL)
-    private Subscription subscription;
+//    @OneToOne(cascade = CascadeType.ALL)
+//    private Subscription subscription;
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

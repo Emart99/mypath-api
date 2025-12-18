@@ -51,11 +51,6 @@ public class AuthService {
         user.setUsername(registerRequest.getUsername());
         user.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
         user.setEmail(registerRequest.getEmail());
-        user.setFirstName(registerRequest.getFirstName());
-        user.setLastName(registerRequest.getLastName());
-        user.setPhone(registerRequest.getPhone());
-        user.setBio(registerRequest.getBio());
-        user.setImageUrl(registerRequest.getImageUrl());
         user.setVisibility(registerRequest.getVisibility() != null ? registerRequest.getVisibility() : true);
         user.setCreatedAt(registerRequest.getCreatedAt());
         user.setUpdatedAt(registerRequest.getUpdatedAt());
