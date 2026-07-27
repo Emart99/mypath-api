@@ -244,6 +244,36 @@ class TrailItemTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void projectStorageBytesSumsImageAndContentBytes() throws Exception {
+        User owner = createUser("combiner");
+        Project project = createProject(owner, "Combined", "private");
+        long trailId = createTrail(owner, project, "Combined trail");
+        long itemId = createItem(owner, trailId, "Draft");
+
+        String content = "café";
+        mockMvc.perform(put("/api/item/" + itemId + "/content")
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content":"%s"}""".formatted(content)))
+                .andExpect(status().isNoContent());
+
+        String fakeHash = "0123456789abcdef".repeat(4);
+        mockMvc.perform(post("/api/uploads/presign")
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"contentType":"image/jpeg","kind":"editor-image","contentHash":"%s","contentBytes":1000,"projectId":"%s"}"""
+                                .formatted(fakeHash, pid(project))))
+                .andExpect(status().isOk());
+
+        long contentBytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        mockMvc.perform(get("/api/project/" + pid(project)).header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.storageBytes").value(1000 + contentBytes));
+    }
+
+    @Test
     void itemEndpointsEnforceOwnership() throws Exception {
         User owner = createUser("itemowner");
         User intruder = createUser("itemintruder");

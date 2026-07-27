@@ -164,6 +164,31 @@ class SubscriptionTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void freeUserCanPublishMoreThanFiveProjectsInARow() throws Exception {
+        User user = createUser("prolificfree");
+        for (int i = 1; i <= 7; i++) {
+            publishViaApi(user, createProject(user, "Path " + i, "private", "A description", null));
+        }
+    }
+
+    @Test
+    void presignRejectsProjectIdNotOwnedByCaller() throws Exception {
+        User owner = createUser("projectowner");
+        User intruder = createUser("projectintruder");
+        Project project = createProject(owner, "Mine", "private", "A description", null);
+
+        String body = """
+                {"contentType":"image/jpeg","kind":"editor-image","contentHash":"%s","contentBytes":1000,"projectId":"%s"}"""
+                .formatted(FAKE_HASH, pid(project));
+
+        mockMvc.perform(post("/api/uploads/presign")
+                        .header("Authorization", bearer(intruder))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void presignAttributesStorageToItsOwnProjectOnly() throws Exception {
         User user = createUser("attributor");
         Project projectA = createProject(user, "Project A", "private", "A description", null);
