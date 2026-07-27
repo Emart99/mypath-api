@@ -12,6 +12,9 @@ import java.util.List;
 @Setter
 @Getter
 @NoArgsConstructor
+@Table(indexes = {
+        @Index(name = "idx_trail_project", columnList = "project_id"),
+})
 public class Trail {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
@@ -28,11 +31,11 @@ public class Trail {
     private int version = 1;
 
     // Lineage: the original trail this one was forked from (null if not a fork).
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "forked_from_trail_id")
     private Trail forkedFrom;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name="project_id")
     private Project project;
 

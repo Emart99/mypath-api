@@ -19,13 +19,13 @@ public interface TrailItemRepository extends JpaRepository<TrailItem, Long> {
             "LEFT JOIN FETCH pi.association WHERE pi.trail.id = :trailId ORDER BY pi.orderIndex ASC, pi.id ASC")
     List<TrailItem> findByTrailIdOrderByOrderIndexAsc(@Param("trailId") Long trailId);
 
-    List<TrailItem> findByItemId(Long itemId);
+    // Join-fetch trail and its project: callers resolve item ownership and the
+    // owning project via pi.getTrail().getProject(), both now LAZY.
+    @Query("SELECT pi FROM TrailItem pi JOIN FETCH pi.trail t LEFT JOIN FETCH t.project WHERE pi.item.id = :itemId")
+    List<TrailItem> findByItemId(@Param("itemId") Long itemId);
+
     int countByTrailId(Long trailId);
 
     @Query("SELECT pi FROM TrailItem pi JOIN FETCH pi.item i LEFT JOIN FETCH i.content WHERE pi.trail.id IN :trailIds ORDER BY pi.orderIndex ASC, pi.id ASC")
     List<TrailItem> findByTrailIdInWithItemAndContent(@Param("trailIds") List<Long> trailIds);
-
-    @Query("SELECT COUNT(pi) > 0 FROM TrailItem pi WHERE pi.trail.project.owner.id = :ownerId " +
-            "AND pi.item.content.content LIKE %:url% AND pi.item.id <> :excludeItemId")
-    boolean existsOtherItemReferencingUrl(@Param("ownerId") Long ownerId, @Param("url") String url, @Param("excludeItemId") Long excludeItemId);
 }

@@ -8,12 +8,14 @@ import com.tramo.backend.trail.dto.ItemResponseDTO;
 import com.tramo.backend.trail.dto.TrailItemDTO;
 import com.tramo.backend.trail.entity.Item;
 import com.tramo.backend.trail.entity.ItemContent;
+import com.tramo.backend.trail.entity.ItemImageReference;
 import com.tramo.backend.trail.entity.Association;
 import com.tramo.backend.trail.entity.AssociationTargetType;
 import com.tramo.backend.trail.entity.AssociationType;
 import com.tramo.backend.trail.entity.Trail;
 import com.tramo.backend.trail.entity.TrailItem;
 import com.tramo.backend.trail.repository.AssociationRepository;
+import com.tramo.backend.trail.repository.ItemImageReferenceRepository;
 import com.tramo.backend.trail.repository.ItemRepository;
 import com.tramo.backend.trail.repository.TrailItemRepository;
 import com.tramo.backend.trail.repository.TrailRepository;
@@ -50,11 +52,13 @@ public class ItemService {
     private final ProjectRepository projectRepository;
     private final R2Client r2Client;
     private final PendingImageDeletionRepository pendingImageDeletionRepository;
+    private final ItemImageReferenceRepository itemImageReferenceRepository;
 
     public ItemService(ItemRepository itemRepository, TrailItemRepository trailItemRepository,
                         AssociationRepository itemLinkRepository, TrailService trailService,
                         TrailRepository trailRepository, ProjectRepository projectRepository,
-                        R2Client r2Client, PendingImageDeletionRepository pendingImageDeletionRepository) {
+                        R2Client r2Client, PendingImageDeletionRepository pendingImageDeletionRepository,
+                        ItemImageReferenceRepository itemImageReferenceRepository) {
         this.itemRepository = itemRepository;
         this.trailItemRepository = trailItemRepository;
         this.itemLinkRepository = itemLinkRepository;
@@ -63,6 +67,7 @@ public class ItemService {
         this.projectRepository = projectRepository;
         this.r2Client = r2Client;
         this.pendingImageDeletionRepository = pendingImageDeletionRepository;
+        this.itemImageReferenceRepository = itemImageReferenceRepository;
     }
 
     public ItemResponseDTO create(Long trailId, ItemRequestDTO request, User requester) {
@@ -192,6 +197,7 @@ public class ItemService {
         itemLinkRepository.deleteBySourceItemId(item.getId());
         itemLinkRepository.deleteByTargetTypeAndTargetId(AssociationTargetType.ITEM, item.getId());
         trailItemRepository.deleteAll(trailItemRepository.findByItemId(item.getId()));
+        itemImageReferenceRepository.deleteByItemId(item.getId());
         itemRepository.delete(item);
     }
 
@@ -214,17 +220,18 @@ public class ItemService {
         itemContent.setUpdatedDate(new Date());
         itemRepository.save(item);
         bumpOwningProjectLastEditedDate(id);
-        deleteOrphanedEditorImages(id, requester, previousContent, content);
+        Set<String> newUrls = deleteOrphanedEditorImages(item, id, requester, previousContent, content);
+        resyncImageReferences(item, newUrls);
     }
 
-    private void deleteOrphanedEditorImages(Long itemId, User requester, String previousContent, String newContent) {
+    private Set<String> deleteOrphanedEditorImages(Item item, Long itemId, User requester, String previousContent, String newContent) {
         Set<String> oldUrls = r2Client.extractReferencedUrls(previousContent);
         Set<String> newUrls = r2Client.extractReferencedUrls(newContent);
         for (String url : oldUrls) {
             if (newUrls.contains(url)) {
                 continue;
             }
-            if (!trailItemRepository.existsOtherItemReferencingUrl(requester.getId(), url, itemId)
+            if (!itemImageReferenceRepository.existsOtherItemReferencingUrl(requester.getId(), url, itemId)
                     && !pendingImageDeletionRepository.existsByUrl(url)) {
                 log.info("deleteOrphanedEditorImages queued url={} item={}", url, itemId);
                 PendingImageDeletion pending = new PendingImageDeletion();
@@ -234,6 +241,19 @@ public class ItemService {
                 pendingImageDeletionRepository.save(pending);
             }
         }
+        return newUrls;
+    }
+
+    // Reconcile ItemImageReference rows with the item's current content, replacing the
+    // old LIKE-scan-over-prose check with an indexed exact-match lookup.
+    private void resyncImageReferences(Item item, Set<String> newUrls) {
+        itemImageReferenceRepository.deleteByItemId(item.getId());
+        for (String url : newUrls) {
+            ItemImageReference reference = new ItemImageReference();
+            reference.setItem(item);
+            reference.setUrl(url);
+            itemImageReferenceRepository.save(reference);
+        }
     }
 
     @Scheduled(fixedRate = IMAGE_DELETION_PURGE_INTERVAL_MS)
@@ -241,7 +261,7 @@ public class ItemService {
     public void purgePendingImageDeletions() {
         Date cutoff = new Date(System.currentTimeMillis() - IMAGE_DELETION_GRACE_MS);
         for (PendingImageDeletion pending : pendingImageDeletionRepository.findByRequestedAtBefore(cutoff)) {
-            if (!trailItemRepository.existsOtherItemReferencingUrl(pending.getOwnerId(), pending.getUrl(), -1L)) {
+            if (!itemImageReferenceRepository.existsOtherItemReferencingUrl(pending.getOwnerId(), pending.getUrl(), -1L)) {
                 log.info("purgePendingImageDeletions deleting url={}", pending.getUrl());
                 r2Client.deleteByPublicUrl(pending.getUrl());
             }
@@ -374,7 +394,7 @@ public class ItemService {
     }
 
     private Item getOwnedItem(Long id, User requester) {
-        Item item = itemRepository.findById(id)
+        Item item = itemRepository.findByIdWithProject(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Item not found"));
         boolean owns = item.getProject() != null
                 ? item.getProject().getOwner().getId().equals(requester.getId())

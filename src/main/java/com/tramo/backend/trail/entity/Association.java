@@ -11,14 +11,17 @@ import java.util.Date;
 @Getter
 @Setter
 @NoArgsConstructor
-@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"source_item_id", "target_type", "target_id"}))
+@Table(
+        uniqueConstraints = @UniqueConstraint(columnNames = {"source_item_id", "target_type", "target_id"}),
+        indexes = @Index(name = "idx_association_target", columnList = "target_type, target_id")
+)
 public class Association {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long id;
 
     // The source is always an Item; the target is polymorphic (Item or Trail).
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_item_id")
     private Item sourceItem;
 

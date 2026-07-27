@@ -109,7 +109,7 @@ public class TrailService {
     }
 
     public Trail getOwnedTrail(Long id, User requester) {
-        Trail trail = trailRepository.findById(id)
+        Trail trail = trailRepository.findByIdWithProject(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Trail not found"));
         if (!trail.getProject().getOwner().getId().equals(requester.getId())) {
             throw new AccessDeniedException("Not allowed to access this trail");

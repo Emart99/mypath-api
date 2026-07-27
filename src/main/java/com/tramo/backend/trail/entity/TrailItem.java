@@ -10,14 +10,19 @@ import lombok.Setter;
 @Setter
 @Getter
 @NoArgsConstructor
+@Table(indexes = {
+        @Index(name = "idx_trail_item_trail", columnList = "trail_id"),
+        @Index(name = "idx_trail_item_item", columnList = "item_id"),
+        @Index(name = "idx_trail_item_association", columnList = "association_id"),
+})
 public class TrailItem {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     private Trail trail;
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     private Item item;
 
     int orderIndex;
@@ -27,6 +32,6 @@ public class TrailItem {
     private String annotation;
 
     // Which graph association was used to jump here from the previous step; null = deliberate jump.
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     private Association association;
 }

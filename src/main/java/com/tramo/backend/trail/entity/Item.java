@@ -13,6 +13,9 @@ import java.util.List;
 @Getter
 @Setter
 @NoArgsConstructor
+@Table(indexes = {
+        @Index(name = "idx_item_project", columnList = "project_id"),
+})
 public class Item {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
@@ -25,7 +28,7 @@ public class Item {
 
     // The project this item belongs to. Lets an item exist without any trail
     // ("loose"). Null on legacy items, which resolve ownership via TrailItem.
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_id")
     private Project project;
 

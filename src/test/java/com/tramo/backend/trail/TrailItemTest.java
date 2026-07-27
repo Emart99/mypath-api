@@ -3,6 +3,7 @@ package com.tramo.backend.trail;
 import com.jayway.jsonpath.JsonPath;
 import com.tramo.backend.AbstractIntegrationTest;
 import com.tramo.backend.trail.repository.AssociationRepository;
+import com.tramo.backend.trail.repository.ItemImageReferenceRepository;
 import com.tramo.backend.trail.repository.ItemRepository;
 import com.tramo.backend.trail.repository.TrailItemRepository;
 import com.tramo.backend.trail.repository.TrailRepository;
@@ -44,6 +45,9 @@ class TrailItemTest extends AbstractIntegrationTest {
 
     @Autowired
     PendingImageDeletionRepository pendingImageDeletionRepository;
+
+    @Autowired
+    ItemImageReferenceRepository itemImageReferenceRepository;
 
     @Autowired
     ItemService itemService;
@@ -704,7 +708,7 @@ class TrailItemTest extends AbstractIntegrationTest {
         assertThat(pendingImageDeletionRepository.existsByUrl(staleUrl)).isFalse();
         assertThat(pendingImageDeletionRepository.existsByUrl(restoredUrl)).isFalse();
         assertThat(pendingImageDeletionRepository.existsByUrl(freshUrl)).isTrue();
-        assertThat(trailItemRepository.existsOtherItemReferencingUrl(owner.getId(), restoredUrl, -1L)).isTrue();
+        assertThat(itemImageReferenceRepository.existsOtherItemReferencingUrl(owner.getId(), restoredUrl, -1L)).isTrue();
     }
 
     @Test
@@ -729,7 +733,7 @@ class TrailItemTest extends AbstractIntegrationTest {
                         .content(contentWithImage))
                 .andExpect(status().isNoContent());
 
-        assertThat(trailItemRepository.existsOtherItemReferencingUrl(owner.getId(), sharedUrl, itemAId)).isTrue();
+        assertThat(itemImageReferenceRepository.existsOtherItemReferencingUrl(owner.getId(), sharedUrl, itemAId)).isTrue();
 
         mockMvc.perform(put("/api/item/" + itemAId + "/content")
                         .header("Authorization", bearer(owner))
@@ -738,8 +742,8 @@ class TrailItemTest extends AbstractIntegrationTest {
                                 {"content":"image removed from A"}"""))
                 .andExpect(status().isNoContent());
 
-        assertThat(trailItemRepository.existsOtherItemReferencingUrl(owner.getId(), sharedUrl, itemAId)).isTrue();
-        assertThat(trailItemRepository.existsOtherItemReferencingUrl(owner.getId(), sharedUrl, itemBId)).isFalse();
+        assertThat(itemImageReferenceRepository.existsOtherItemReferencingUrl(owner.getId(), sharedUrl, itemAId)).isTrue();
+        assertThat(itemImageReferenceRepository.existsOtherItemReferencingUrl(owner.getId(), sharedUrl, itemBId)).isFalse();
         assertThat(pendingImageDeletionRepository.existsByUrl(sharedUrl)).isFalse();
     }
 }
