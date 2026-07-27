@@ -26,7 +26,7 @@ class SubscriptionTest extends AbstractIntegrationTest {
     private void upgrade(User user) throws Exception {
         mockMvc.perform(post("/api/subscription/mock-upgrade").header("Authorization", bearer(user)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.premium").value(true));
+                .andExpect(jsonPath("$.supporter").value(true));
     }
 
     private void publishViaApi(User owner, Project project) throws Exception {
@@ -44,21 +44,21 @@ class SubscriptionTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void mockUpgradeFlipsPremiumAndIsIdempotent() throws Exception {
+    void mockUpgradeFlipsSupporterAndIsIdempotent() throws Exception {
         User user = createUser("subscriber");
 
         mockMvc.perform(get("/api/subscription").header("Authorization", bearer(user)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.premium").value(false))
+                .andExpect(jsonPath("$.supporter").value(false))
                 .andExpect(jsonPath("$.storageQuotaBytes").value(FREE_STORAGE_BYTES))
-                .andExpect(jsonPath("$.publishesPerWeek").value(5));
+                .andExpect(jsonPath("$.publishesPerWeek").value(-1));
 
         upgrade(user);
         upgrade(user); // second call is a no-op, not an error
 
         mockMvc.perform(get("/api/subscription").header("Authorization", bearer(user)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.premium").value(true))
+                .andExpect(jsonPath("$.supporter").value(true))
                 .andExpect(jsonPath("$.publishesPerWeek").value(-1));
     }
 
@@ -71,7 +71,7 @@ class SubscriptionTest extends AbstractIntegrationTest {
 
         mockMvc.perform(delete("/api/subscription").header("Authorization", bearer(user)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.premium").value(false));
+                .andExpect(jsonPath("$.supporter").value(false));
 
         // content untouched by downgrade
         mockMvc.perform(get("/api/public/project/" + pid(project)))
@@ -79,7 +79,7 @@ class SubscriptionTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void presignRejectedOverStorageQuotaButAllowedForPremium() throws Exception {
+    void presignRejectedOverStorageQuotaButAllowedForSupporter() throws Exception {
         User user = createUser("hoarder");
         UploadRecord existing = new UploadRecord();
         existing.setUserId(user.getId());
@@ -117,45 +117,7 @@ class SubscriptionTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void sixthPublishInAWeekBlockedForFreeAllowedForPremium() throws Exception {
-        User user = createUser("prolificfree");
-        for (int i = 1; i <= 5; i++) {
-            publishViaApi(user, createProject(user, "Path " + i, "private", "A description", null));
-        }
-
-        Project sixth = createProject(user, "Path 6", "private", "A description", null);
-        mockMvc.perform(put("/api/project/" + pid(sixth))
-                        .header("Authorization", bearer(user))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"visibility":"published"}"""))
-                .andExpect(status().isTooManyRequests());
-
-        upgrade(user);
-        publishViaApi(user, sixth);
-    }
-
-    @Test
-    void republishDoesNotBurnPublishQuota() throws Exception {
-        User user = createUser("republisher");
-        Project first = createProject(user, "First", "private", "A description", null);
-        publishViaApi(user, first);
-        for (int i = 2; i <= 5; i++) {
-            publishViaApi(user, createProject(user, "Path " + i, "private", "A description", null));
-        }
-
-        // at the weekly limit now — but toggling an already-published-once project stays free
-        mockMvc.perform(put("/api/project/" + pid(first))
-                        .header("Authorization", bearer(user))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"visibility":"private"}"""))
-                .andExpect(status().isOk());
-        publishViaApi(user, first);
-    }
-
-    @Test
-    void gifAvatarIsPremiumOnlyButEditorGifsStayFree() throws Exception {
+    void gifAvatarIsSupporterOnlyButEditorGifsStayFree() throws Exception {
         User user = createUser("giffan");
         String gifAvatar = """
                 {"contentType":"image/gif","kind":"avatar","contentHash":"%s","contentBytes":1000}""".formatted(FAKE_HASH);
@@ -199,5 +161,30 @@ class SubscriptionTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/profile/stats").header("Authorization", bearer(user)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.badges[?(@.code == 'supporter')].earned").value(false));
+    }
+
+    @Test
+    void presignAttributesStorageToItsOwnProjectOnly() throws Exception {
+        User user = createUser("attributor");
+        Project projectA = createProject(user, "Project A", "private", "A description", null);
+        Project projectB = createProject(user, "Project B", "private", "A description", null);
+
+        String body = """
+                {"contentType":"image/jpeg","kind":"editor-image","contentHash":"%s","contentBytes":1000,"projectId":"%s"}"""
+                .formatted(FAKE_HASH, pid(projectA));
+
+        mockMvc.perform(post("/api/uploads/presign")
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/project/" + pid(projectA)).header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.storageBytes").value(1000));
+
+        mockMvc.perform(get("/api/project/" + pid(projectB)).header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.storageBytes").value(0));
     }
 }

@@ -1,6 +1,8 @@
 package com.tramo.backend.upload;
 
+import com.tramo.backend.common.ProjectIdCodec;
 import com.tramo.backend.exception.LimitExceededException;
+import com.tramo.backend.project.repository.ProjectRepository;
 import com.tramo.backend.subscription.service.SubscriptionService;
 import com.tramo.backend.upload.dto.UploadPresignRequestDTO;
 import com.tramo.backend.upload.dto.UploadPresignResponseDTO;
@@ -10,6 +12,7 @@ import com.tramo.backend.user.entity.User;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,15 +35,21 @@ public class UploadController {
     private final R2Client r2Client;
     private final SubscriptionService subscriptionService;
     private final UploadRecordRepository uploadRecordRepository;
+    private final ProjectRepository projectRepository;
+    private final ProjectIdCodec projectIdCodec;
     private final long maxUploadBytes;
 
     public UploadController(R2Client r2Client,
                             SubscriptionService subscriptionService,
                             UploadRecordRepository uploadRecordRepository,
+                            ProjectRepository projectRepository,
+                            ProjectIdCodec projectIdCodec,
                             @Value("${app.limits.max-upload-bytes}") long maxUploadBytes) {
         this.r2Client = r2Client;
         this.subscriptionService = subscriptionService;
         this.uploadRecordRepository = uploadRecordRepository;
+        this.projectRepository = projectRepository;
+        this.projectIdCodec = projectIdCodec;
         this.maxUploadBytes = maxUploadBytes;
     }
 
@@ -56,13 +65,21 @@ public class UploadController {
                     "File too large (max %dMB per upload)".formatted(maxUploadBytes / (1024 * 1024)));
         }
         if ("avatar".equals(request.getKind()) && "image/gif".equals(request.getContentType())
-                && !subscriptionService.isPremium(user)) {
-            throw new LimitExceededException("Animated GIF avatars are a premium perk. Upgrade to use one.");
+                && !subscriptionService.isSupporter(user)) {
+            throw new LimitExceededException("Animated GIF avatars are a supporter perk. Upgrade to use one.");
         }
         subscriptionService.assertUploadAllowed(user, request.getContentBytes());
 
+        Long projectId = null;
+        if (request.getProjectId() != null) {
+            projectId = projectIdCodec.decode(request.getProjectId());
+            if (!projectRepository.existsByIdAndOwnerId(projectId, user.getId())) {
+                throw new AccessDeniedException("Not allowed to upload to this project");
+            }
+        }
+
         String key = "%s/%d/%s.%s".formatted(request.getKind(), user.getId(), request.getContentHash(), extension);
-        recordUpload(user, key, request.getContentBytes());
+        recordUpload(user, projectId, key, request.getContentBytes());
         String uploadUrl = r2Client.presignPut(key, request.getContentType());
         String publicUrl = r2Client.publicUrlFor(key);
 
@@ -70,7 +87,7 @@ public class UploadController {
     }
 
     // Content-addressed keys mean re-uploading identical bytes hits the same key — upsert, never double-count.
-    private void recordUpload(User user, String key, long bytes) {
+    private void recordUpload(User user, Long projectId, String key, long bytes) {
         UploadRecord record = uploadRecordRepository.findByObjectKey(key).orElseGet(() -> {
             UploadRecord fresh = new UploadRecord();
             fresh.setUserId(user.getId());
@@ -79,6 +96,7 @@ public class UploadController {
             return fresh;
         });
         record.setBytes(bytes);
+        record.setProjectId(projectId);
         uploadRecordRepository.save(record);
     }
 }

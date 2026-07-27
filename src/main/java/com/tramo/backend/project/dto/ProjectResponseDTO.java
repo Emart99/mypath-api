@@ -18,4 +18,5 @@ public class ProjectResponseDTO {
     private String tags;
     private Date creationDate;
     private Date modifiedDate;
+    private long storageBytes;
 }

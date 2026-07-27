@@ -223,6 +223,27 @@ class TrailItemTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void projectStorageBytesReflectsItemContentByteLength() throws Exception {
+        User owner = createUser("weigher");
+        Project project = createProject(owner, "Weighed", "private");
+        long trailId = createTrail(owner, project, "Weighed trail");
+        long itemId = createItem(owner, trailId, "Draft");
+
+        // café has a multi-byte UTF-8 character (é = 2 bytes) — proves byte length, not char length.
+        String content = "café";
+        mockMvc.perform(put("/api/item/" + itemId + "/content")
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content":"%s"}""".formatted(content)))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/project/" + pid(project)).header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.storageBytes").value(content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length));
+    }
+
+    @Test
     void itemEndpointsEnforceOwnership() throws Exception {
         User owner = createUser("itemowner");
         User intruder = createUser("itemintruder");

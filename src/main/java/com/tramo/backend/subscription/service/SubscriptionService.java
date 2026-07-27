@@ -2,7 +2,6 @@ package com.tramo.backend.subscription.service;
 
 import com.tramo.backend.exception.LimitExceededException;
 import com.tramo.backend.notification.service.NotificationService;
-import com.tramo.backend.project.repository.ProjectRepository;
 import com.tramo.backend.subscription.dto.SubscriptionStatusDTO;
 import com.tramo.backend.subscription.entity.Subscription;
 import com.tramo.backend.subscription.repository.SubscriptionRepository;
@@ -22,47 +21,40 @@ public class SubscriptionService {
     public static final String STATUS_ACTIVE = "ACTIVE";
     public static final String STATUS_CANCELED = "CANCELED";
     public static final String SUPPORTER_BADGE_CODE = "supporter";
-    private static final long WEEK_MILLIS = 7L * 24 * 60 * 60 * 1000;
 
     private final SubscriptionRepository subscriptionRepository;
     private final UploadRecordRepository uploadRecordRepository;
-    private final ProjectRepository projectRepository;
     private final UserBadgeRepository userBadgeRepository;
     private final NotificationService notificationService;
     private final long freeStorageBytes;
-    private final long premiumStorageBytes;
-    private final long freePublishesPerWeek;
+    private final long supporterStorageBytes;
 
     public SubscriptionService(SubscriptionRepository subscriptionRepository,
                                UploadRecordRepository uploadRecordRepository,
-                               ProjectRepository projectRepository,
                                UserBadgeRepository userBadgeRepository,
                                NotificationService notificationService,
                                @Value("${app.limits.free.storage-bytes}") long freeStorageBytes,
-                               @Value("${app.limits.premium.storage-bytes}") long premiumStorageBytes,
-                               @Value("${app.limits.free.publishes-per-week}") long freePublishesPerWeek) {
+                               @Value("${app.limits.supporter.storage-bytes}") long supporterStorageBytes) {
         this.subscriptionRepository = subscriptionRepository;
         this.uploadRecordRepository = uploadRecordRepository;
-        this.projectRepository = projectRepository;
         this.userBadgeRepository = userBadgeRepository;
         this.notificationService = notificationService;
         this.freeStorageBytes = freeStorageBytes;
-        this.premiumStorageBytes = premiumStorageBytes;
-        this.freePublishesPerWeek = freePublishesPerWeek;
+        this.supporterStorageBytes = supporterStorageBytes;
     }
 
-    public boolean isPremium(User user) {
-        return isPremium(user.getId());
+    public boolean isSupporter(User user) {
+        return isSupporter(user.getId());
     }
 
-    public boolean isPremium(Long userId) {
+    public boolean isSupporter(Long userId) {
         return subscriptionRepository.findFirstByUserIdAndStatus(userId, STATUS_ACTIVE)
                 .filter(s -> s.getEndDate() == null || s.getEndDate().after(new Date()))
                 .isPresent();
     }
 
     public long storageQuotaBytes(User user) {
-        return isPremium(user) ? premiumStorageBytes : freeStorageBytes;
+        return isSupporter(user) ? supporterStorageBytes : freeStorageBytes;
     }
 
     /** Blocks new uploads past quota; never touches existing content. */
@@ -75,37 +67,21 @@ public class SubscriptionService {
         }
     }
 
-    /** First-publish rate limit — republishing an already-published-once project is exempt by design. */
-    public void assertCanPublish(User user) {
-        if (isPremium(user)) {
-            return;
-        }
-        Date weekAgo = new Date(System.currentTimeMillis() - WEEK_MILLIS);
-        long recent = projectRepository.countByOwnerIdAndFirstPublishedDateAfter(user.getId(), weekAgo);
-        if (recent >= freePublishesPerWeek) {
-            throw new LimitExceededException(
-                    "Publish limit reached (%d per week on the free plan). Try again later or upgrade.".formatted(freePublishesPerWeek));
-        }
-    }
-
     public SubscriptionStatusDTO getStatus(User user) {
-        boolean premium = isPremium(user);
+        boolean supporter = isSupporter(user);
         long used = uploadRecordRepository.sumBytesByUserId(user.getId());
-        Date weekAgo = new Date(System.currentTimeMillis() - WEEK_MILLIS);
-        long publishesUsed = projectRepository.countByOwnerIdAndFirstPublishedDateAfter(user.getId(), weekAgo);
         return new SubscriptionStatusDTO(
-                premium,
+                supporter,
                 used,
-                premium ? premiumStorageBytes : freeStorageBytes,
-                publishesUsed,
-                premium ? -1 : freePublishesPerWeek);
+                supporter ? supporterStorageBytes : freeStorageBytes,
+                -1);
     }
 
     // Mock until a real payment provider lands: "upgrading" just creates the ACTIVE row.
     // Only this method (and cancel) should change when payments become real.
     @Transactional
     public SubscriptionStatusDTO mockUpgrade(User user) {
-        if (!isPremium(user)) {
+        if (!isSupporter(user)) {
             Subscription subscription = new Subscription();
             subscription.setUser(user);
             subscription.setStatus(STATUS_ACTIVE);

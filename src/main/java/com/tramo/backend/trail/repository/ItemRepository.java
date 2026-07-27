@@ -26,4 +26,16 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     // item's EAGER content (that would be an N+1 hidden behind findAllById).
     @Query("SELECT i.id, i.title FROM Item i WHERE i.id IN :ids")
     List<Object[]> findIdTitleByIdIn(@Param("ids") Collection<Long> ids);
+
+    // octet_length (not character length) for a true byte count of multi-byte UTF-8 content.
+    @Query("SELECT COALESCE(SUM(function('octet_length', i.content.content)), 0) FROM Item i WHERE i.project.id = :projectId")
+    long sumContentBytesByProjectId(@Param("projectId") Long projectId);
+
+    @Query("SELECT i.project.id AS projectId, SUM(function('octet_length', i.content.content)) AS bytes FROM Item i WHERE i.project.id IN :projectIds GROUP BY i.project.id")
+    List<ProjectContentBytesSum> sumContentBytesGroupedByProjectIdIn(@Param("projectIds") List<Long> projectIds);
+
+    interface ProjectContentBytesSum {
+        Long getProjectId();
+        Long getBytes();
+    }
 }

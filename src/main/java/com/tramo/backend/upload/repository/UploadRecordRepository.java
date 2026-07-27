@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UploadRecordRepository extends JpaRepository<UploadRecord, Long> {
@@ -16,4 +17,15 @@ public interface UploadRecordRepository extends JpaRepository<UploadRecord, Long
 
     @Query("SELECT COALESCE(SUM(u.bytes), 0) FROM UploadRecord u WHERE u.userId = :userId")
     long sumBytesByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT COALESCE(SUM(u.bytes), 0) FROM UploadRecord u WHERE u.projectId = :projectId")
+    long sumBytesByProjectId(@Param("projectId") Long projectId);
+
+    @Query("SELECT u.projectId AS projectId, SUM(u.bytes) AS bytes FROM UploadRecord u WHERE u.projectId IN :projectIds GROUP BY u.projectId")
+    List<ProjectBytesSum> sumBytesGroupedByProjectIdIn(@Param("projectIds") List<Long> projectIds);
+
+    interface ProjectBytesSum {
+        Long getProjectId();
+        Long getBytes();
+    }
 }

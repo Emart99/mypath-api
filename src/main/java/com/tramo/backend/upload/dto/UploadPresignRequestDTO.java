@@ -25,4 +25,7 @@ public class UploadPresignRequestDTO {
     @NotNull
     @Positive
     private Long contentBytes;
+
+    // Hashid-encoded project id; absent for avatar uploads, which have no project.
+    private String projectId;
 }

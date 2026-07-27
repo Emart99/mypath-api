@@ -6,9 +6,8 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public class SubscriptionStatusDTO {
-    private boolean premium;
+    private boolean supporter;
     private long storageUsedBytes;
     private long storageQuotaBytes;
-    private long publishesUsedThisWeek;
     private long publishesPerWeek;  // -1 = unlimited
 }

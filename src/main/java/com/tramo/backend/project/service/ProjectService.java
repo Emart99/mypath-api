@@ -8,6 +8,7 @@ import com.tramo.backend.moderation.repository.CommentReportRepository;
 import com.tramo.backend.moderation.repository.ProjectReportRepository;
 import com.tramo.backend.notification.service.NotificationService;
 import com.tramo.backend.subscription.service.SubscriptionService;
+import com.tramo.backend.upload.repository.UploadRecordRepository;
 import com.tramo.backend.trail.entity.Item;
 import com.tramo.backend.trail.entity.ItemContent;
 import com.tramo.backend.trail.entity.Association;
@@ -109,6 +110,7 @@ public class ProjectService {
     private final ProjectIdCodec projectIdCodec;
     private final R2Client r2Client;
     private final SubscriptionService subscriptionService;
+    private final UploadRecordRepository uploadRecordRepository;
 
     public ProjectService(ProjectRepository projectRepository, TrailRepository trailRepository,
                            TrailItemRepository trailItemRepository, ItemRepository itemRepository,
@@ -119,8 +121,10 @@ public class ProjectService {
                            UserBadgeRepository userBadgeRepository, NotificationService notificationService,
                            ProjectReportRepository projectReportRepository, CommentRepository commentRepository,
                            CommentReportRepository commentReportRepository, ProjectIdCodec projectIdCodec,
-                           R2Client r2Client, SubscriptionService subscriptionService) {
+                           R2Client r2Client, SubscriptionService subscriptionService,
+                           UploadRecordRepository uploadRecordRepository) {
         this.subscriptionService = subscriptionService;
+        this.uploadRecordRepository = uploadRecordRepository;
         this.projectRepository = projectRepository;
         this.trailRepository = trailRepository;
         this.trailItemRepository = trailItemRepository;
@@ -157,8 +161,15 @@ public class ProjectService {
     }
 
     public List<ProjectResponseDTO> getAllForUser(User owner) {
-        return projectRepository.findByOwnerId(owner.getId()).stream()
-                .map(this::toResponse)
+        List<Project> projects = projectRepository.findByOwnerId(owner.getId());
+        List<Long> projectIds = projects.stream().map(Project::getId).toList();
+        Map<Long, Long> imageBytesByProjectId = uploadRecordRepository.sumBytesGroupedByProjectIdIn(projectIds).stream()
+                .collect(Collectors.toMap(UploadRecordRepository.ProjectBytesSum::getProjectId, UploadRecordRepository.ProjectBytesSum::getBytes));
+        Map<Long, Long> contentBytesByProjectId = itemRepository.sumContentBytesGroupedByProjectIdIn(projectIds).stream()
+                .collect(Collectors.toMap(ItemRepository.ProjectContentBytesSum::getProjectId, ItemRepository.ProjectContentBytesSum::getBytes));
+        return projects.stream()
+                .map(p -> toResponse(p, imageBytesByProjectId.getOrDefault(p.getId(), 0L)
+                        + contentBytesByProjectId.getOrDefault(p.getId(), 0L)))
                 .toList();
     }
 
@@ -186,7 +197,6 @@ public class ProjectService {
             }
             project.setVisibility(request.getVisibility());
             if ("published".equals(request.getVisibility()) && project.getFirstPublishedDate() == null) {
-                subscriptionService.assertCanPublish(requester);
                 project.setFirstPublishedDate(new Date());
                 firstPublish = true;
             }
@@ -726,7 +736,7 @@ public class ProjectService {
 
     public ProfileStatsBundleDTO getProfileStatsBundle(User user) {
         ProfileStatsDTO stats = getProfileStats(user);
-        List<BadgeDTO> badges = buildBadges(stats, subscriptionService.isPremium(user));
+        List<BadgeDTO> badges = buildBadges(stats, subscriptionService.isSupporter(user));
         awardNewlyEarnedBadges(user, badges);
         return new ProfileStatsBundleDTO(stats, badges);
     }
@@ -788,7 +798,7 @@ public class ProjectService {
 
     private void checkAndAwardBadges(User user) {
         ProfileStatsDTO stats = getProfileStats(user);
-        awardNewlyEarnedBadges(user, buildBadges(stats, subscriptionService.isPremium(user)));
+        awardNewlyEarnedBadges(user, buildBadges(stats, subscriptionService.isSupporter(user)));
     }
 
     private boolean crossedViewBadgeThreshold(long before, long after) {
@@ -808,7 +818,7 @@ public class ProjectService {
                 && blockedUserRepository.findByBlockerIdAndBlockedId(requester.getId(), target.getId()).isPresent();
 
         return new PublicProfileDTO(target.getUsername(), target.getBio(), target.getImageUrl(), target.getCreatedAt(),
-                stats, buildBadges(stats, subscriptionService.isPremium(target)), following, self, blocked);
+                stats, buildBadges(stats, subscriptionService.isSupporter(target)), following, self, blocked);
     }
 
     public PageResponseDTO<ProjectFeedItemDTO> getPublishedPageForUser(String username, User requester, int page, int size) {
@@ -1095,7 +1105,16 @@ public class ProjectService {
         return project;
     }
 
+    // ponytail: single-project lookup, fine for create/getById/update call sites.
+    // List endpoints must batch via sumBytesGroupedByProjectIdIn / sumContentBytesGroupedByProjectIdIn
+    // instead (see getAllForUser). Total = image bytes + item content bytes (project's own weight).
     private ProjectResponseDTO toResponse(Project project) {
+        long bytes = uploadRecordRepository.sumBytesByProjectId(project.getId())
+                + itemRepository.sumContentBytesByProjectId(project.getId());
+        return toResponse(project, bytes);
+    }
+
+    private ProjectResponseDTO toResponse(Project project, long storageBytes) {
         return new ProjectResponseDTO(
                 projectIdCodec.encode(project.getId()),
                 project.getTitle(),
@@ -1104,7 +1123,8 @@ public class ProjectService {
                 project.getThumbnail(),
                 project.getTags(),
                 project.getCreationDate(),
-                latestOf(project.getModifiedDate(), project.getLastEditedDate())
+                latestOf(project.getModifiedDate(), project.getLastEditedDate()),
+                storageBytes
         );
     }
 
