@@ -36,6 +36,9 @@ public class UserPreferencesService {
         if (request.getCommentsPolicy() != null) {
             user.setCommentsPolicy(request.getCommentsPolicy());
         }
+        if (request.getEditorTourSeen() != null) {
+            user.setEditorTourSeen(request.getEditorTourSeen());
+        }
         userRepository.save(user);
         return toDto(user);
     }
@@ -46,7 +49,8 @@ public class UserPreferencesService {
                 user.getEmailDigestFrequency() != null ? user.getEmailDigestFrequency() : "weekly",
                 user.getShowUpvotes() == null || user.getShowUpvotes(),
                 user.getAllowForks() == null || user.getAllowForks(),
-                user.getCommentsPolicy() != null ? user.getCommentsPolicy() : "everyone"
+                user.getCommentsPolicy() != null ? user.getCommentsPolicy() : "everyone",
+                Boolean.TRUE.equals(user.getEditorTourSeen())
         );
     }
 }

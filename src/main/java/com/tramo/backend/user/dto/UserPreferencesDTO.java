@@ -11,4 +11,5 @@ public class UserPreferencesDTO {
     private boolean showUpvotes;
     private boolean allowForks;
     private String commentsPolicy;
+    private boolean editorTourSeen;
 }

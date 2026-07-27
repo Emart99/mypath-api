@@ -21,7 +21,25 @@ class UserPreferencesTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.emailDigestFrequency").value("weekly"))
                 .andExpect(jsonPath("$.showUpvotes").value(true))
                 .andExpect(jsonPath("$.allowForks").value(true))
-                .andExpect(jsonPath("$.commentsPolicy").value("everyone"));
+                .andExpect(jsonPath("$.commentsPolicy").value("everyone"))
+                .andExpect(jsonPath("$.editorTourSeen").value(false));
+    }
+
+    @Test
+    void editorTourSeenPersists() throws Exception {
+        var user = createUser("prefstour");
+
+        mockMvc.perform(put("/user/preferences")
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"editorTourSeen":true}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.editorTourSeen").value(true));
+
+        mockMvc.perform(get("/user/preferences").header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.editorTourSeen").value(true));
     }
 
     @Test

@@ -53,6 +53,7 @@ public class User implements UserDetails {
     private Boolean showUpvotes;
     private Boolean allowForks;
     private String commentsPolicy;
+    private Boolean editorTourSeen;
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

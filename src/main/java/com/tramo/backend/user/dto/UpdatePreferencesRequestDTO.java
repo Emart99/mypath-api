@@ -20,4 +20,6 @@ public class UpdatePreferencesRequestDTO {
 
     @Pattern(regexp = "everyone|following|noone", message = "commentsPolicy must be 'everyone', 'following', or 'noone'")
     private String commentsPolicy;
+
+    private Boolean editorTourSeen;
 }
