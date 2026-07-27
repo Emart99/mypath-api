@@ -12,5 +12,8 @@ import java.util.List;
 public class PublicTrailDTO {
     private Long id;
     private String title;
+    private String description;
+    private int version;
+    private String forkedFromId;
     private List<PublicItemDTO> items;
 }

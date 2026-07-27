@@ -14,6 +14,7 @@ import com.tramo.backend.trail.entity.Association;
 import com.tramo.backend.trail.entity.AssociationTargetType;
 import com.tramo.backend.trail.entity.Trail;
 import com.tramo.backend.trail.entity.TrailItem;
+import com.tramo.backend.trail.dto.AssociationDTO;
 import com.tramo.backend.trail.repository.AssociationRepository;
 import com.tramo.backend.trail.repository.ItemRepository;
 import com.tramo.backend.trail.repository.TrailItemRepository;
@@ -428,19 +429,31 @@ public class ProjectService {
         }
 
         List<Trail> projectTrails = trailRepository.findByProjectId(id);
-        Map<Long, List<TrailItem>> itemsByTrailId = projectTrails.isEmpty()
-                ? Map.of()
-                : trailItemRepository.findByTrailIdInWithItemAndContent(projectTrails.stream().map(Trail::getId).toList())
-                .stream()
+        List<TrailItem> allTrailItems = projectTrails.isEmpty()
+                ? List.of()
+                : trailItemRepository.findByTrailIdInWithItemAndContent(projectTrails.stream().map(Trail::getId).toList());
+        Map<Long, List<TrailItem>> itemsByTrailId = allTrailItems.stream()
                 .collect(Collectors.groupingBy(trailItem -> trailItem.getTrail().getId()));
+
+        // Item ids in scope for this project, used both as the association-target
+        // whitelist (no leaking titles from other projects) and as the title source
+        // for those targets (no extra query needed — we already loaded these items).
+        Map<Long, Item> projectItemById = allTrailItems.stream()
+                .collect(Collectors.toMap(ti -> ti.getItem().getId(), TrailItem::getItem, (a, b) -> a));
+        Map<Long, List<Association>> outgoingByItemId = projectItemById.isEmpty()
+                ? Map.of()
+                : itemLinkRepository.findBySourceItemIdIn(projectItemById.keySet()).stream()
+                        .collect(Collectors.groupingBy(a -> a.getSourceItem().getId()));
 
         List<PublicTrailDTO> trails = projectTrails.stream()
                 .map(trail -> new PublicTrailDTO(
                         trail.getId(),
                         trail.getTitle(),
+                        trail.getDescription(),
+                        trail.getVersion(),
+                        trail.getForkedFrom() != null ? String.valueOf(trail.getForkedFrom().getId()) : null,
                         itemsByTrailId.getOrDefault(trail.getId(), List.of()).stream()
-                                .map(TrailItem::getItem)
-                                .map(this::toPublicItem)
+                                .map(ti -> toPublicItem(ti, projectItemById, outgoingByItemId))
                                 .toList()
                 ))
                 .toList();
@@ -1053,9 +1066,24 @@ public class ProjectService {
         return String.join(",", tags);
     }
 
-    private PublicItemDTO toPublicItem(Item item) {
+    private PublicItemDTO toPublicItem(TrailItem trailItem, Map<Long, Item> projectItemById,
+                                        Map<Long, List<Association>> outgoingByItemId) {
+        Item item = trailItem.getItem();
         String content = item.getContent() != null ? item.getContent().getContent() : "";
-        return new PublicItemDTO(item.getId(), item.getTitle(), item.getType(), content, item.getTitleAlign());
+        List<AssociationDTO> associations = outgoingByItemId.getOrDefault(item.getId(), List.of()).stream()
+                .filter(a -> a.getTargetType() == AssociationTargetType.ITEM && projectItemById.containsKey(a.getTargetId()))
+                .map(a -> new AssociationDTO(
+                        String.valueOf(a.getId()),
+                        a.getType().name(),
+                        a.getTargetType().name(),
+                        String.valueOf(a.getTargetId()),
+                        projectItemById.get(a.getTargetId()).getTitle()
+                ))
+                .toList();
+        return new PublicItemDTO(item.getId(), item.getTitle(), item.getType(), content, item.getTitleAlign(),
+                trailItem.getAnnotation(),
+                trailItem.getAssociation() != null ? String.valueOf(trailItem.getAssociation().getId()) : null,
+                associations);
     }
 
     public Project getOwnedProject(Long id, User requester) {
