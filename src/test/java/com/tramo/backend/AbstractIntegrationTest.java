@@ -7,6 +7,7 @@ import org.hibernate.stat.Statistics;
 import com.tramo.backend.auth.service.EmailService;
 import com.tramo.backend.auth.service.GoogleTokenVerifier;
 import com.tramo.backend.common.ProjectIdCodec;
+import com.tramo.backend.subscription.patreon.PatreonClient;
 import com.tramo.backend.project.entity.Project;
 import com.tramo.backend.project.repository.ProjectRepository;
 import com.tramo.backend.security.jwt.JwtService;
@@ -35,6 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public abstract class AbstractIntegrationTest {
 
     protected static final String TEST_JWT_SECRET = "dGVzdC1zZWNyZXQtdGVzdC1zZWNyZXQtdGVzdC1zZWNyZXQ=";
+    protected static final String TEST_PATREON_WEBHOOK_SECRET = "test-patreon-webhook-secret";
 
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
@@ -49,6 +51,10 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("app.jwt.secret", () -> TEST_JWT_SECRET);
         registry.add("app.google.client-id", () -> "test-client-id");
+        registry.add("app.patreon.client-id", () -> "test-patreon-client-id");
+        registry.add("app.patreon.client-secret", () -> "test-patreon-client-secret");
+        registry.add("app.patreon.redirect-uri", () -> "http://localhost:8080/api/auth/patreon/callback");
+        registry.add("app.patreon.webhook-secret", () -> TEST_PATREON_WEBHOOK_SECRET);
         registry.add("app.project-id.salt", () -> "test-project-id-salt");
         registry.add("app.r2.account-id", () -> "test-account-id");
         registry.add("app.r2.access-key", () -> "test-access-key");
@@ -64,6 +70,9 @@ public abstract class AbstractIntegrationTest {
 
     @MockitoBean
     protected GoogleTokenVerifier googleTokenVerifier;
+
+    @MockitoBean
+    protected PatreonClient patreonClient;
 
     @Autowired
     protected MockMvc mockMvc;

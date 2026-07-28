@@ -55,6 +55,13 @@ public class User implements UserDetails {
     private String commentsPolicy;
     private Boolean editorTourSeen;
 
+    @Column(unique = true)
+    private String patreonUserId;
+    @Column(columnDefinition = "text")
+    private String patreonAccessToken;
+    @Column(columnDefinition = "text")
+    private String patreonRefreshToken;
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority((role.name())));

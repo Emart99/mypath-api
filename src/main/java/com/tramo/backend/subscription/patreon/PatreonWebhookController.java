@@ -1,0 +1,102 @@
+package com.tramo.backend.subscription.patreon;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import com.tramo.backend.subscription.service.SubscriptionService;
+import com.tramo.backend.user.entity.User;
+import com.tramo.backend.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+import java.util.Optional;
+
+// Public endpoint (see SecurityConfiguration /api/webhooks/** permitAll) — the HMAC
+// signature is the only credential; no JWT is expected on inbound Patreon requests.
+@RestController
+@RequestMapping("/api/webhooks/patreon")
+public class PatreonWebhookController {
+    private static final Logger log = LoggerFactory.getLogger(PatreonWebhookController.class);
+
+    private final String webhookSecret;
+    private final UserRepository userRepository;
+    private final SubscriptionService subscriptionService;
+    private final ObjectMapper objectMapper;
+
+    public PatreonWebhookController(@Value("${app.patreon.webhook-secret}") String webhookSecret,
+                                     UserRepository userRepository,
+                                     SubscriptionService subscriptionService,
+                                     ObjectMapper objectMapper) {
+        this.webhookSecret = webhookSecret;
+        this.userRepository = userRepository;
+        this.subscriptionService = subscriptionService;
+        this.objectMapper = objectMapper;
+    }
+
+    @PostMapping
+    public ResponseEntity<Void> handle(@RequestBody String rawBody,
+                                        @RequestHeader("X-Patreon-Signature") String signature,
+                                        @RequestHeader(value = "X-Patreon-Event", required = false) String eventType) {
+        if (!signatureValid(rawBody, signature)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        String patreonUserId = extractPatreonUserId(rawBody);
+        if (patreonUserId == null) {
+            log.warn("Patreon webhook payload missing member->user relationship, ignoring");
+            return ResponseEntity.ok().build();
+        }
+
+        Optional<User> user = userRepository.findByPatreonUserId(patreonUserId);
+        if (user.isEmpty()) {
+            log.info("Patreon webhook for unlinked patreonUserId={}", patreonUserId);
+            return ResponseEntity.ok().build();
+        }
+
+        if (eventType != null && eventType.endsWith("pledge:delete")) {
+            subscriptionService.deactivateSupporterSubscription(user.get());
+        } else {
+            subscriptionService.activateSupporterSubscription(user.get(), subscriptionService.findOrCreateSupporterPlan());
+        }
+        return ResponseEntity.ok().build();
+    }
+
+    // Patreon signs webhooks with HMAC-MD5 (not SHA), hex-encoded, in X-Patreon-Signature.
+    private boolean signatureValid(String rawBody, String signature) {
+        try {
+            Mac mac = Mac.getInstance("HmacMD5");
+            mac.init(new SecretKeySpec(webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacMD5"));
+            byte[] digest = mac.doFinal(rawBody.getBytes(StandardCharsets.UTF_8));
+            String computed = HexFormat.of().formatHex(digest);
+            return MessageDigest.isEqual(
+                    computed.getBytes(StandardCharsets.UTF_8),
+                    signature.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    // Pledge/member webhook payloads carry `data` = a "member" resource with a
+    // relationship to the patron's Patreon user id.
+    private String extractPatreonUserId(String rawBody) {
+        try {
+            JsonNode root = objectMapper.readTree(rawBody);
+            JsonNode userId = root.path("data").path("relationships").path("user").path("data").path("id");
+            return userId.isMissingNode() || userId.isNull() ? null : userId.asText();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+}
