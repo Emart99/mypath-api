@@ -705,23 +705,30 @@ public class ProjectService {
     }
 
     public UserProfileDTO getProfile(User user) {
-        return new UserProfileDTO(user.getUsername(), user.getEmail(), user.getBio(), user.getImageUrl(), user.getCreatedAt(), user.getRole().name());
+        return new UserProfileDTO(user.getUsername(), user.getEmail(), user.getBio(), user.getImageUrl(), user.getBannerUrl(), user.getCreatedAt(), user.getRole().name());
     }
 
     @Transactional
     public UserProfileDTO updateProfile(User user, UpdateProfileRequestDTO request) {
         String previousImageUrl = user.getImageUrl();
+        String previousBannerUrl = user.getBannerUrl();
         if (request.getBio() != null) {
             user.setBio(request.getBio().isBlank() ? null : request.getBio());
         }
         if (request.getImageUrl() != null) {
             user.setImageUrl(request.getImageUrl().isBlank() ? null : request.getImageUrl());
         }
+        if (request.getBannerUrl() != null) {
+            user.setBannerUrl(request.getBannerUrl().isBlank() ? null : request.getBannerUrl());
+        }
         User saved = userRepository.save(user);
         if (request.getImageUrl() != null && !request.getImageUrl().equals(previousImageUrl)) {
             r2Client.deleteByPublicUrl(previousImageUrl);
         }
-        return new UserProfileDTO(saved.getUsername(), saved.getEmail(), saved.getBio(), saved.getImageUrl(), saved.getCreatedAt(), saved.getRole().name());
+        if (request.getBannerUrl() != null && !request.getBannerUrl().equals(previousBannerUrl)) {
+            r2Client.deleteByPublicUrl(previousBannerUrl);
+        }
+        return new UserProfileDTO(saved.getUsername(), saved.getEmail(), saved.getBio(), saved.getImageUrl(), saved.getBannerUrl(), saved.getCreatedAt(), saved.getRole().name());
     }
 
     private ProfileStatsDTO getProfileStats(User user) {
@@ -817,7 +824,7 @@ public class ProjectService {
         boolean blocked = !self && requester != null
                 && blockedUserRepository.findByBlockerIdAndBlockedId(requester.getId(), target.getId()).isPresent();
 
-        return new PublicProfileDTO(target.getUsername(), target.getBio(), target.getImageUrl(), target.getCreatedAt(),
+        return new PublicProfileDTO(target.getUsername(), target.getBio(), target.getImageUrl(), target.getBannerUrl(), target.getCreatedAt(),
                 stats, buildBadges(stats, subscriptionService.isSupporter(target)), following, self, blocked);
     }
 

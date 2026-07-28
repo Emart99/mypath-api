@@ -14,6 +14,7 @@ public class PublicProfileDTO {
     private String username;
     private String bio;
     private String imageUrl;
+    private String bannerUrl;
     private Date createdAt;
     private ProfileStatsDTO stats;
     private List<BadgeDTO> badges;

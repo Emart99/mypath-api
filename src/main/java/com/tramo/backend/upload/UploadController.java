@@ -68,6 +68,9 @@ public class UploadController {
                 && !subscriptionService.isSupporter(user)) {
             throw new LimitExceededException("Animated GIF avatars are a supporter perk. Upgrade to use one.");
         }
+        if ("banner".equals(request.getKind()) && !subscriptionService.isSupporter(user)) {
+            throw new LimitExceededException("Profile banners are a supporter perk. Upgrade to use one.");
+        }
         subscriptionService.assertUploadAllowed(user, request.getContentBytes());
 
         Long projectId = null;

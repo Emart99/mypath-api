@@ -37,6 +37,8 @@ public class User implements UserDetails {
     private String bio;
     @Column(columnDefinition = "text")
     private String imageUrl;
+    @Column(columnDefinition = "text")
+    private String bannerUrl;
     private Boolean visibility;
     private Date createdAt;
     private Date updatedAt;

@@ -13,7 +13,7 @@ public class UploadPresignRequestDTO {
     @NotBlank
     private String contentType;
 
-    @Pattern(regexp = "avatar|thumbnail|editor-image", message = "kind must be avatar, thumbnail, or editor-image")
+    @Pattern(regexp = "avatar|thumbnail|editor-image|banner", message = "kind must be avatar, thumbnail, editor-image, or banner")
     private String kind;
 
     @NotBlank

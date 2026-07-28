@@ -8,4 +8,5 @@ import lombok.Setter;
 public class UpdateProfileRequestDTO {
     private String bio;
     private String imageUrl;
+    private String bannerUrl;
 }

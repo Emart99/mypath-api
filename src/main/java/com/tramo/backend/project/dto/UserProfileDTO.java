@@ -14,6 +14,7 @@ public class UserProfileDTO {
     private String email;
     private String bio;
     private String imageUrl;
+    private String bannerUrl;
     private Date createdAt;
     private String role;
 }
