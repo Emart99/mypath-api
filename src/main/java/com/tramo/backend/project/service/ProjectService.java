@@ -249,6 +249,34 @@ public class ProjectService {
     }
 
     @Transactional
+    public ProjectResponseDTO publish(Long id, User requester) {
+        Project project = getOwnedProject(id, requester);
+        if (project.getDescription() == null || project.getDescription().isBlank()) {
+            throw new IllegalArgumentException("Add a description before publishing");
+        }
+        boolean firstPublish = project.getFirstPublishedDate() == null;
+        project.setVisibility("published");
+        if (firstPublish) {
+            project.setFirstPublishedDate(new Date());
+        }
+        project.setModifiedDate(new Date());
+        project = projectRepository.save(project);
+
+        // ponytail: publishing the project bumps every trail's version.
+        // Move this to a per-trail publish if that granularity is ever added.
+        for (Trail trail : trailRepository.findByProjectId(project.getId())) {
+            trail.setVersion(trail.getVersion() + 1);
+            trailRepository.save(trail);
+        }
+        createSnapshot(project, "PUBLISH");
+        checkAndAwardBadges(project.getOwner());
+        if (firstPublish) {
+            notifyFollowers(project.getOwner(), "PUBLISH", project);
+        }
+        return toResponse(project);
+    }
+
+    @Transactional
     public void shareProject(Long id, User sharer) {
         Project project = projectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
@@ -502,6 +530,22 @@ public class ProjectService {
         ProjectSnapshot snapshot = projectSnapshotRepository.findById(snapshotId)
                 .orElseThrow(() -> new ResourceNotFoundException("Version not found"));
         if (!snapshot.getProject().getId().equals(id)) {
+            throw new ResourceNotFoundException("Version not found");
+        }
+        ProjectSnapshotData content = objectMapper.readValue(snapshot.getContent(), ProjectSnapshotData.class);
+        return new ProjectSnapshotDetailDTO(snapshot.getId(), snapshot.getVersion(), snapshot.getCreatedDate(), content);
+    }
+
+    public ProjectSnapshotDetailDTO getPublicSnapshotDetail(Long id, Long snapshotId) {
+        Project project = projectRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Version not found"));
+        if (project.getFirstPublishedDate() == null) {
+            // Never published — no version of this project is publicly linkable.
+            throw new ResourceNotFoundException("Version not found");
+        }
+        ProjectSnapshot snapshot = projectSnapshotRepository.findById(snapshotId)
+                .orElseThrow(() -> new ResourceNotFoundException("Version not found"));
+        if (!snapshot.getProject().getId().equals(id) || !"PUBLISH".equals(snapshot.getTrigger())) {
             throw new ResourceNotFoundException("Version not found");
         }
         ProjectSnapshotData content = objectMapper.readValue(snapshot.getContent(), ProjectSnapshotData.class);

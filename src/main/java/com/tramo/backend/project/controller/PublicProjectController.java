@@ -5,6 +5,7 @@ import com.tramo.backend.project.dto.ExploreBundleDTO;
 import com.tramo.backend.project.dto.FollowUserDTO;
 import com.tramo.backend.project.dto.PageResponseDTO;
 import com.tramo.backend.project.dto.ProjectFeedItemDTO;
+import com.tramo.backend.project.dto.ProjectSnapshotDetailDTO;
 import com.tramo.backend.project.dto.PublicProfileDTO;
 import com.tramo.backend.project.dto.PublicProjectResponseDTO;
 import com.tramo.backend.project.dto.TagCountDTO;
@@ -37,6 +38,11 @@ public class PublicProjectController {
                                                                 @AuthenticationPrincipal User user,
                                                                 @RequestHeader(value = "X-Anon-Id", required = false) String anonId) {
         return ResponseEntity.ok(projectService.getPublicProject(projectIdCodec.decode(id), user, anonId));
+    }
+
+    @GetMapping("/project/{id}/versions/{snapshotId}")
+    public ResponseEntity<ProjectSnapshotDetailDTO> getPublicVersion(@PathVariable String id, @PathVariable Long snapshotId) {
+        return ResponseEntity.ok(projectService.getPublicSnapshotDetail(projectIdCodec.decode(id), snapshotId));
     }
 
     @GetMapping("/projects")

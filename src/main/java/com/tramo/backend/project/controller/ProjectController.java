@@ -68,6 +68,11 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.toggleVote(projectIdCodec.decode(id), user, ClientIp.from(request), anonId));
     }
 
+    @PostMapping("/{id}/publish")
+    public ResponseEntity<ProjectResponseDTO> publish(@PathVariable String id, @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(projectService.publish(projectIdCodec.decode(id), user));
+    }
+
     @PostMapping("/{id}/fork")
     public ResponseEntity<ProjectResponseDTO> fork(@PathVariable String id, @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(projectService.fork(projectIdCodec.decode(id), user));
