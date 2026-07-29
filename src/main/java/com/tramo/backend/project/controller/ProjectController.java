@@ -6,6 +6,8 @@ import com.tramo.backend.moderation.service.ModerationService;
 import com.tramo.backend.project.dto.BookmarkResponseDTO;
 import com.tramo.backend.project.dto.ProjectRequestDTO;
 import com.tramo.backend.project.dto.ProjectResponseDTO;
+import com.tramo.backend.project.dto.ProjectSnapshotDetailDTO;
+import com.tramo.backend.project.dto.ProjectSnapshotSummaryDTO;
 import com.tramo.backend.project.dto.VoteResponseDTO;
 import com.tramo.backend.project.service.ProjectService;
 import com.tramo.backend.security.ClientIp;
@@ -87,5 +89,16 @@ public class ProjectController {
     public ResponseEntity<Void> share(@PathVariable String id, @AuthenticationPrincipal User user) {
         projectService.shareProject(projectIdCodec.decode(id), user);
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{id}/versions")
+    public ResponseEntity<List<ProjectSnapshotSummaryDTO>> listVersions(@PathVariable String id, @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(projectService.listSnapshots(projectIdCodec.decode(id), user));
+    }
+
+    @GetMapping("/{id}/versions/{snapshotId}")
+    public ResponseEntity<ProjectSnapshotDetailDTO> getVersion(@PathVariable String id, @PathVariable Long snapshotId,
+                                                                @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(projectService.getSnapshotDetail(projectIdCodec.decode(id), snapshotId, user));
     }
 }

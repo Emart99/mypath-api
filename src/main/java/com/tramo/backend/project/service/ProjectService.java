@@ -34,6 +34,8 @@ import com.tramo.backend.project.dto.ProfileStatsDTO;
 import com.tramo.backend.project.dto.ProjectFeedItemDTO;
 import com.tramo.backend.project.dto.ProjectRequestDTO;
 import com.tramo.backend.project.dto.ProjectResponseDTO;
+import com.tramo.backend.project.dto.ProjectSnapshotDetailDTO;
+import com.tramo.backend.project.dto.ProjectSnapshotSummaryDTO;
 import com.tramo.backend.project.dto.PublicItemDTO;
 import com.tramo.backend.project.dto.PublicTrailDTO;
 import com.tramo.backend.project.dto.PublicProfileDTO;
@@ -44,12 +46,15 @@ import com.tramo.backend.project.dto.UserProfileDTO;
 import com.tramo.backend.project.dto.VoteResponseDTO;
 import com.tramo.backend.project.entity.Project;
 import com.tramo.backend.project.entity.ProjectBookmark;
+import com.tramo.backend.project.entity.ProjectSnapshot;
 import com.tramo.backend.project.entity.ProjectVote;
 import com.tramo.backend.project.entity.ProjectView;
 import com.tramo.backend.project.repository.ProjectBookmarkRepository;
 import com.tramo.backend.project.repository.ProjectRepository;
+import com.tramo.backend.project.repository.ProjectSnapshotRepository;
 import com.tramo.backend.project.repository.ProjectViewRepository;
 import com.tramo.backend.project.repository.ProjectVoteRepository;
+import com.tramo.backend.project.snapshot.ProjectSnapshotData;
 import com.tramo.backend.user.entity.Follow;
 import com.tramo.backend.user.entity.User;
 import com.tramo.backend.user.entity.UserBadge;
@@ -67,6 +72,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -111,6 +117,8 @@ public class ProjectService {
     private final R2Client r2Client;
     private final SubscriptionService subscriptionService;
     private final UploadRecordRepository uploadRecordRepository;
+    private final ProjectSnapshotRepository projectSnapshotRepository;
+    private final ObjectMapper objectMapper;
 
     public ProjectService(ProjectRepository projectRepository, TrailRepository trailRepository,
                            TrailItemRepository trailItemRepository, ItemRepository itemRepository,
@@ -122,9 +130,12 @@ public class ProjectService {
                            ProjectReportRepository projectReportRepository, CommentRepository commentRepository,
                            CommentReportRepository commentReportRepository, ProjectIdCodec projectIdCodec,
                            R2Client r2Client, SubscriptionService subscriptionService,
-                           UploadRecordRepository uploadRecordRepository) {
+                           UploadRecordRepository uploadRecordRepository,
+                           ProjectSnapshotRepository projectSnapshotRepository, ObjectMapper objectMapper) {
         this.subscriptionService = subscriptionService;
         this.uploadRecordRepository = uploadRecordRepository;
+        this.projectSnapshotRepository = projectSnapshotRepository;
+        this.objectMapper = objectMapper;
         this.projectRepository = projectRepository;
         this.trailRepository = trailRepository;
         this.trailItemRepository = trailItemRepository;
@@ -226,6 +237,7 @@ public class ProjectService {
                     trail.setVersion(trail.getVersion() + 1);
                     trailRepository.save(trail);
                 }
+                createSnapshot(project, "PUBLISH");
             }
             // first-ever publish only — republishing after a temporary private is not news
             // (deliberate re-announcement is what SHARE is for)
@@ -279,6 +291,7 @@ public class ProjectService {
         projectViewRepository.deleteByProjectId(id);
         notificationService.deleteAllForProject(id);
         projectReportRepository.deleteByProjectId(id);
+        projectSnapshotRepository.deleteByProjectId(id);
         List<Long> commentIds = commentRepository.findIdsByProjectId(id);
         if (!commentIds.isEmpty()) {
             commentReportRepository.deleteByCommentIdIn(commentIds);
@@ -307,6 +320,8 @@ public class ProjectService {
         if (blockedUserRepository.existsEitherDirection(requester.getId(), source.getOwner().getId())) {
             throw new AccessDeniedException("Cannot fork this project");
         }
+
+        createSnapshot(source, "FORK");
 
         Project fork = new Project();
         fork.setTitle(source.getTitle());
@@ -411,6 +426,88 @@ public class ProjectService {
         return itemRepository.save(copy);
     }
 
+    private void createSnapshot(Project project, String trigger) {
+        List<Trail> projectTrails = trailRepository.findByProjectId(project.getId());
+        List<Long> trailIds = projectTrails.stream().map(Trail::getId).toList();
+        // One batched query for every step across every trail — avoids a per-trail round trip.
+        Map<Long, List<TrailItem>> membershipsByTrailId = trailIds.isEmpty() ? Map.of()
+                : trailItemRepository.findByTrailIdInWithItemContentAndAssociation(trailIds).stream()
+                        .collect(Collectors.groupingBy(ti -> ti.getTrail().getId(), LinkedHashMap::new, Collectors.toList()));
+
+        // Item id -> Item, and each item's OUTGOING links — same shape as getPublicProject's
+        // toPublicItem, batched once across the whole project instead of per item.
+        Map<Long, Item> itemById = membershipsByTrailId.values().stream()
+                .flatMap(List::stream)
+                .collect(Collectors.toMap(ti -> ti.getItem().getId(), TrailItem::getItem, (a, b) -> a));
+        Map<Long, List<Association>> outgoingByItemId = itemById.isEmpty() ? Map.of()
+                : itemLinkRepository.findBySourceItemIdIn(itemById.keySet()).stream()
+                        .collect(Collectors.groupingBy(a -> a.getSourceItem().getId()));
+
+        List<ProjectSnapshotData.TrailData> trails = new ArrayList<>();
+        for (Trail trail : projectTrails) {
+            List<ProjectSnapshotData.ItemData> items = new ArrayList<>();
+            for (TrailItem membership : membershipsByTrailId.getOrDefault(trail.getId(), List.of())) {
+                Item item = membership.getItem();
+                Association assoc = membership.getAssociation();
+                List<ProjectSnapshotData.AssociationData> associations = outgoingByItemId
+                        .getOrDefault(item.getId(), List.of()).stream()
+                        .filter(a -> a.getTargetType() == AssociationTargetType.ITEM && itemById.containsKey(a.getTargetId()))
+                        .map(a -> new ProjectSnapshotData.AssociationData(a.getId(), a.getType().name(),
+                                a.getTargetType().name(), a.getTargetId(), itemById.get(a.getTargetId()).getTitle()))
+                        .toList();
+                items.add(new ProjectSnapshotData.ItemData(item.getId(), item.getTitle(), item.getType(),
+                        item.getTitleAlign(), item.getContent() != null ? item.getContent().getContent() : null,
+                        membership.getAnnotation(), assoc != null ? assoc.getId() : null, associations));
+            }
+            trails.add(new ProjectSnapshotData.TrailData(trail.getId(), trail.getTitle(), trail.getDescription(),
+                    trail.getVisibility(), trail.getVersion(),
+                    trail.getForkedFrom() != null ? trail.getForkedFrom().getId() : null, items));
+        }
+        ProjectSnapshotData data = new ProjectSnapshotData(project.getId(), project.getTitle(), project.getDescription(),
+                project.getVisibility(), project.getThumbnail(), project.getTags(), trails);
+
+        ProjectSnapshot snapshot = new ProjectSnapshot();
+        snapshot.setProject(project);
+        snapshot.setTrigger(trigger);
+        if ("PUBLISH".equals(trigger)) {
+            snapshot.setVersion(projectSnapshotRepository.findMaxVersion(project.getId()).orElse(0) + 1);
+        }
+        snapshot.setContent(objectMapper.writeValueAsString(data));
+        snapshot.setCreatedDate(new Date());
+        projectSnapshotRepository.save(snapshot);
+    }
+
+    // Every published project is expected to have a PUBLISH snapshot (createSnapshot fires on
+    // every publish transition) — this covers the one gap: projects published before that existed.
+    // Called once at boot by ProjectSnapshotBackfillRunner; safe to call repeatedly (idempotent).
+    @Transactional
+    public void backfillMissingPublishSnapshots() {
+        Set<Long> alreadySnapshotted = Set.copyOf(projectSnapshotRepository.findProjectIdsWithPublishSnapshot());
+        for (Project project : projectRepository.findByVisibilityOrderByModifiedDateDesc("published")) {
+            if (!alreadySnapshotted.contains(project.getId())) {
+                createSnapshot(project, "PUBLISH");
+            }
+        }
+    }
+
+    public List<ProjectSnapshotSummaryDTO> listSnapshots(Long id, User requester) {
+        getOwnedProject(id, requester);
+        return projectSnapshotRepository.findByProjectIdAndTriggerOrderByVersionDesc(id, "PUBLISH").stream()
+                .map(s -> new ProjectSnapshotSummaryDTO(s.getId(), s.getVersion(), s.getCreatedDate()))
+                .toList();
+    }
+
+    public ProjectSnapshotDetailDTO getSnapshotDetail(Long id, Long snapshotId, User requester) {
+        getOwnedProject(id, requester);
+        ProjectSnapshot snapshot = projectSnapshotRepository.findById(snapshotId)
+                .orElseThrow(() -> new ResourceNotFoundException("Version not found"));
+        if (!snapshot.getProject().getId().equals(id)) {
+            throw new ResourceNotFoundException("Version not found");
+        }
+        ProjectSnapshotData content = objectMapper.readValue(snapshot.getContent(), ProjectSnapshotData.class);
+        return new ProjectSnapshotDetailDTO(snapshot.getId(), snapshot.getVersion(), snapshot.getCreatedDate(), content);
+    }
+
     @Transactional
     public PublicProjectResponseDTO getPublicProject(Long id, User requester, String anonId) {
         Project project = projectRepository.findById(id)
@@ -438,42 +535,72 @@ public class ProjectService {
             }
         }
 
-        List<Trail> projectTrails = trailRepository.findByProjectId(id);
-        List<TrailItem> allTrailItems = projectTrails.isEmpty()
-                ? List.of()
-                : trailItemRepository.findByTrailIdInWithItemAndContent(projectTrails.stream().map(Trail::getId).toList());
-        Map<Long, List<TrailItem>> itemsByTrailId = allTrailItems.stream()
-                .collect(Collectors.groupingBy(trailItem -> trailItem.getTrail().getId()));
+        // Published projects should always have a PUBLISH snapshot (createSnapshot fires on every
+        // publish, and ProjectSnapshotBackfillRunner covers anything published before that existed)
+        // — but fall back to live content if one somehow doesn't exist yet, rather than 500ing.
+        Optional<ProjectSnapshot> snapshotOpt = "published".equals(project.getVisibility())
+                ? projectSnapshotRepository.findLatestPublishByProjectIdIn(List.of(id)).stream().findFirst()
+                : Optional.empty();
 
-        // Item ids in scope for this project, used both as the association-target
-        // whitelist (no leaking titles from other projects) and as the title source
-        // for those targets (no extra query needed — we already loaded these items).
-        Map<Long, Item> projectItemById = allTrailItems.stream()
-                .collect(Collectors.toMap(ti -> ti.getItem().getId(), TrailItem::getItem, (a, b) -> a));
-        Map<Long, List<Association>> outgoingByItemId = projectItemById.isEmpty()
-                ? Map.of()
-                : itemLinkRepository.findBySourceItemIdIn(projectItemById.keySet()).stream()
-                        .collect(Collectors.groupingBy(a -> a.getSourceItem().getId()));
+        String title;
+        String description;
+        Date displayDate;
+        List<PublicTrailDTO> trails;
+        if (snapshotOpt.isPresent()) {
+            ProjectSnapshot snapshot = snapshotOpt.get();
+            ProjectSnapshotData data = objectMapper.readValue(snapshot.getContent(), ProjectSnapshotData.class);
+            title = data.title();
+            description = data.description();
+            displayDate = snapshot.getCreatedDate();
+            trails = data.trails().stream()
+                    .map(t -> new PublicTrailDTO(
+                            t.id(), t.title(), t.description(), t.version(),
+                            t.forkedFromId() != null ? String.valueOf(t.forkedFromId()) : null,
+                            t.items().stream().map(this::toPublicItem).toList()
+                    ))
+                    .toList();
+        } else {
+            // Unlisted, or a published project with no snapshot yet: live content.
+            List<Trail> projectTrails = trailRepository.findByProjectId(id);
+            List<TrailItem> allTrailItems = projectTrails.isEmpty()
+                    ? List.of()
+                    : trailItemRepository.findByTrailIdInWithItemAndContent(projectTrails.stream().map(Trail::getId).toList());
+            Map<Long, List<TrailItem>> itemsByTrailId = allTrailItems.stream()
+                    .collect(Collectors.groupingBy(trailItem -> trailItem.getTrail().getId()));
 
-        List<PublicTrailDTO> trails = projectTrails.stream()
-                .map(trail -> new PublicTrailDTO(
-                        trail.getId(),
-                        trail.getTitle(),
-                        trail.getDescription(),
-                        trail.getVersion(),
-                        trail.getForkedFrom() != null ? String.valueOf(trail.getForkedFrom().getId()) : null,
-                        itemsByTrailId.getOrDefault(trail.getId(), List.of()).stream()
-                                .map(ti -> toPublicItem(ti, projectItemById, outgoingByItemId))
-                                .toList()
-                ))
-                .toList();
+            // Item ids in scope for this project, used both as the association-target
+            // whitelist (no leaking titles from other projects) and as the title source
+            // for those targets (no extra query needed — we already loaded these items).
+            Map<Long, Item> projectItemById = allTrailItems.stream()
+                    .collect(Collectors.toMap(ti -> ti.getItem().getId(), TrailItem::getItem, (a, b) -> a));
+            Map<Long, List<Association>> outgoingByItemId = projectItemById.isEmpty()
+                    ? Map.of()
+                    : itemLinkRepository.findBySourceItemIdIn(projectItemById.keySet()).stream()
+                            .collect(Collectors.groupingBy(a -> a.getSourceItem().getId()));
+
+            title = project.getTitle();
+            description = project.getDescription();
+            displayDate = project.getModifiedDate();
+            trails = projectTrails.stream()
+                    .map(trail -> new PublicTrailDTO(
+                            trail.getId(),
+                            trail.getTitle(),
+                            trail.getDescription(),
+                            trail.getVersion(),
+                            trail.getForkedFrom() != null ? String.valueOf(trail.getForkedFrom().getId()) : null,
+                            itemsByTrailId.getOrDefault(trail.getId(), List.of()).stream()
+                                    .map(ti -> toPublicItem(ti, projectItemById, outgoingByItemId))
+                                    .toList()
+                    ))
+                    .toList();
+        }
 
         return new PublicProjectResponseDTO(
                 projectIdCodec.encode(project.getId()),
-                project.getTitle(),
-                project.getDescription(),
+                title,
+                description,
                 project.getOwner().getUsername(),
-                project.getModifiedDate(),
+                displayDate,
                 trails,
                 projectVoteRepository.countByProjectId(id),
                 requester != null && projectVoteRepository.findByProjectIdAndUserId(id, requester.getId()).isPresent(),
@@ -486,51 +613,23 @@ public class ProjectService {
         );
     }
 
+    private PublicItemDTO toPublicItem(ProjectSnapshotData.ItemData item) {
+        List<AssociationDTO> associations = item.associations().stream()
+                .map(a -> new AssociationDTO(String.valueOf(a.id()), a.type(), a.targetType(),
+                        String.valueOf(a.targetId()), a.targetTitle()))
+                .toList();
+        return new PublicItemDTO(item.id(), item.title(), item.type(), item.content(), item.titleAlign(),
+                item.annotation(), item.associationId() != null ? String.valueOf(item.associationId()) : null,
+                associations);
+    }
+
     public List<ProjectFeedItemDTO> getPublishedFeed(String query, String sort, User requester) {
         String q = query == null ? "" : query.trim().toLowerCase();
         List<Project> published = projectRepository.findByVisibilityOrderByModifiedDateDesc("published").stream()
                 .filter(project -> q.isEmpty() || matchesSearch(project, q))
                 .toList();
 
-        List<Long> publishedIds = published.stream().map(Project::getId).toList();
-        Map<Long, Long> voteCounts = publishedIds.isEmpty()
-                ? Map.of()
-                : projectVoteRepository.countGroupedByProjectIdIn(publishedIds).stream()
-                .collect(Collectors.toMap(ProjectVoteRepository.ProjectVoteCount::getProjectId, ProjectVoteRepository.ProjectVoteCount::getVoteCount));
-        Map<Long, Long> forkCounts = publishedIds.isEmpty()
-                ? Map.of()
-                : projectRepository.countGroupedByForkedFromIdIn(publishedIds).stream()
-                .collect(Collectors.toMap(ProjectRepository.ProjectForkCount::getProjectId, ProjectRepository.ProjectForkCount::getForkCount));
-        Set<Long> votedProjectIds = requester == null || publishedIds.isEmpty()
-                ? Set.of()
-                : Set.copyOf(projectVoteRepository.findVotedProjectIds(requester.getId(), publishedIds));
-        Set<Long> bookmarkedProjectIds = requester == null || publishedIds.isEmpty()
-                ? Set.of()
-                : Set.copyOf(projectBookmarkRepository.findBookmarkedProjectIds(requester.getId(), publishedIds));
-        Map<Long, Long> commentCounts = publishedIds.isEmpty()
-                ? Map.of()
-                : commentRepository.countGroupedByProjectIdIn(publishedIds).stream()
-                .collect(Collectors.toMap(CommentRepository.ProjectCommentCount::getProjectId, CommentRepository.ProjectCommentCount::getCommentCount));
-
-        List<ProjectFeedItemDTO> feed = published.stream()
-                .map(project -> new ProjectFeedItemDTO(
-                        projectIdCodec.encode(project.getId()),
-                        project.getTitle(),
-                        project.getDescription(),
-                        project.getOwner().getUsername(),
-                        project.getOwner().getImageUrl(),
-                        project.getThumbnail(),
-                        project.getTags(),
-                        project.getModifiedDate(),
-                        voteCounts.getOrDefault(project.getId(), 0L),
-                        votedProjectIds.contains(project.getId()),
-                        bookmarkedProjectIds.contains(project.getId()),
-                        project.getViewCount(),
-                        forkCounts.getOrDefault(project.getId(), 0L),
-                        commentCounts.getOrDefault(project.getId(), 0L),
-                        project.isFeatured()
-                ))
-                .collect(Collectors.toList());
+        List<ProjectFeedItemDTO> feed = new ArrayList<>(toPublishedFeedItems(published, requester));
 
         if ("hot".equals(sort)) {
             feed.sort(Comparator.comparingLong(ProjectFeedItemDTO::getVoteCount).reversed()
@@ -570,7 +669,8 @@ public class ProjectService {
             hasMore = projectPage.hasNext();
         }
 
-        FeedContext ctx = FeedContext.forProjects(pageProjects, requester, projectRepository, projectVoteRepository, projectBookmarkRepository, commentRepository);
+        FeedContext ctx = FeedContext.forPublishedProjects(pageProjects, requester, projectRepository, projectVoteRepository,
+                projectBookmarkRepository, commentRepository, projectSnapshotRepository, objectMapper);
         List<ProjectFeedItemDTO> feed = pageProjects.stream()
                 .map(project -> toFeedItem(project, ctx))
                 .toList();
@@ -582,7 +682,8 @@ public class ProjectService {
             if (!"following".equals(sort)) {
                 featured = projectRepository.findByFeaturedTrue()
                         .filter(project -> "published".equals(project.getVisibility()))
-                        .map(project -> toFeedItem(project, FeedContext.forProjects(List.of(project), requester, projectRepository, projectVoteRepository, projectBookmarkRepository, commentRepository)))
+                        .map(project -> toFeedItem(project, FeedContext.forPublishedProjects(List.of(project), requester, projectRepository,
+                                projectVoteRepository, projectBookmarkRepository, commentRepository, projectSnapshotRepository, objectMapper)))
                         .orElse(null);
             }
             hotTopics = cachedHotTopics;
@@ -751,7 +852,7 @@ public class ProjectService {
     public PageResponseDTO<ProjectFeedItemDTO> getPublishedPage(User user, int page, int size) {
         Page<Project> result = projectRepository.findByOwnerIdAndVisibilityOrderByCreationDateDescPaged(
                 user.getId(), "published", PageRequest.of(page, size));
-        return new PageResponseDTO<>(toFeedItems(result.getContent(), user), result.hasNext());
+        return new PageResponseDTO<>(toPublishedFeedItems(result.getContent(), user), result.hasNext());
     }
 
     public PageResponseDTO<ProjectFeedItemDTO> getBookmarksPage(User user, int page, int size) {
@@ -833,7 +934,7 @@ public class ProjectService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         Page<Project> result = projectRepository.findByOwnerIdAndVisibilityOrderByCreationDateDescPaged(
                 target.getId(), "published", PageRequest.of(page, size));
-        return new PageResponseDTO<>(toFeedItems(result.getContent(), requester), result.hasNext());
+        return new PageResponseDTO<>(toPublishedFeedItems(result.getContent(), requester), result.hasNext());
     }
 
     @Transactional
@@ -948,12 +1049,22 @@ public class ProjectService {
         return projects.stream().map(project -> toFeedItem(project, ctx)).toList();
     }
 
+    // Same as toFeedItems, but for lists already filtered to visibility="published" — shows
+    // each project's frozen snapshot content instead of live edits.
+    private List<ProjectFeedItemDTO> toPublishedFeedItems(List<Project> projects, User requester) {
+        FeedContext ctx = FeedContext.forPublishedProjects(projects, requester, projectRepository, projectVoteRepository,
+                projectBookmarkRepository, commentRepository, projectSnapshotRepository, objectMapper);
+        return projects.stream().map(project -> toFeedItem(project, ctx)).toList();
+    }
+
     private List<ForkFeedItemDTO> toForkFeedItems(List<Project> projects, User requester) {
         FeedContext ctx = FeedContext.forProjects(projects, requester, projectRepository, projectVoteRepository, projectBookmarkRepository, commentRepository);
         return projects.stream().map(project -> toForkFeedItem(project, requester.getUsername(), ctx)).toList();
     }
 
-    private record FeedContext(Map<Long, Long> voteCounts, Map<Long, Long> forkCounts, Map<Long, Long> commentCounts, Set<Long> votedProjectIds, Set<Long> bookmarkedProjectIds) {
+    private record FeedContext(Map<Long, Long> voteCounts, Map<Long, Long> forkCounts, Map<Long, Long> commentCounts,
+                                Set<Long> votedProjectIds, Set<Long> bookmarkedProjectIds,
+                                Map<Long, ProjectSnapshotData> snapshotDataByProjectId) {
         static FeedContext forProjects(
                 List<Project> projects,
                 User requester,
@@ -962,7 +1073,7 @@ public class ProjectService {
                 ProjectBookmarkRepository bookmarkRepository
         ) {
             List<Long> ids = projects.stream().map(Project::getId).toList();
-            if (ids.isEmpty()) return new FeedContext(Map.of(), Map.of(), Map.of(), Set.of(), Set.of());
+            if (ids.isEmpty()) return new FeedContext(Map.of(), Map.of(), Map.of(), Set.of(), Set.of(), Map.of());
 
             Map<Long, Long> voteCounts = new HashMap<>();
             for (ProjectVoteRepository.ProjectVoteCount row : voteRepository.countGroupedByProjectIdIn(ids)) {
@@ -978,7 +1089,7 @@ public class ProjectService {
             Set<Long> bookmarkedProjectIds = requester == null
                     ? Set.of()
                     : Set.copyOf(bookmarkRepository.findBookmarkedProjectIds(requester.getId(), ids));
-            return new FeedContext(voteCounts, forkCounts, Map.of(), votedProjectIds, bookmarkedProjectIds);
+            return new FeedContext(voteCounts, forkCounts, Map.of(), votedProjectIds, bookmarkedProjectIds, Map.of());
         }
 
         static FeedContext forProjects(
@@ -996,19 +1107,42 @@ public class ProjectService {
             for (CommentRepository.ProjectCommentCount row : commentRepository.countGroupedByProjectIdIn(ids)) {
                 commentCounts.put(row.getProjectId(), row.getCommentCount());
             }
-            return new FeedContext(base.voteCounts(), base.forkCounts(), commentCounts, base.votedProjectIds(), base.bookmarkedProjectIds());
+            return new FeedContext(base.voteCounts(), base.forkCounts(), commentCounts, base.votedProjectIds(), base.bookmarkedProjectIds(), Map.of());
+        }
+
+        // Same as above plus each project's frozen PUBLISH snapshot data — for read paths where
+        // every project passed in is already known to be published (Explore, profile "published").
+        static FeedContext forPublishedProjects(
+                List<Project> projects,
+                User requester,
+                ProjectRepository projectRepository,
+                ProjectVoteRepository voteRepository,
+                ProjectBookmarkRepository bookmarkRepository,
+                CommentRepository commentRepository,
+                ProjectSnapshotRepository snapshotRepository,
+                ObjectMapper objectMapper
+        ) {
+            FeedContext base = forProjects(projects, requester, projectRepository, voteRepository, bookmarkRepository, commentRepository);
+            List<Long> ids = projects.stream().map(Project::getId).toList();
+            if (ids.isEmpty()) return base;
+            Map<Long, ProjectSnapshotData> snapshotData = new HashMap<>();
+            for (ProjectSnapshot snapshot : snapshotRepository.findLatestPublishByProjectIdIn(ids)) {
+                snapshotData.put(snapshot.getProject().getId(), objectMapper.readValue(snapshot.getContent(), ProjectSnapshotData.class));
+            }
+            return new FeedContext(base.voteCounts(), base.forkCounts(), base.commentCounts(), base.votedProjectIds(), base.bookmarkedProjectIds(), snapshotData);
         }
     }
 
     private ProjectFeedItemDTO toFeedItem(Project project, FeedContext ctx) {
+        ProjectSnapshotData snapshot = ctx.snapshotDataByProjectId().get(project.getId());
         return new ProjectFeedItemDTO(
                 projectIdCodec.encode(project.getId()),
-                project.getTitle(),
-                project.getDescription(),
+                snapshot != null ? snapshot.title() : project.getTitle(),
+                snapshot != null ? snapshot.description() : project.getDescription(),
                 project.getOwner().getUsername(),
                 project.getOwner().getImageUrl(),
-                project.getThumbnail(),
-                project.getTags(),
+                snapshot != null ? snapshot.thumbnail() : project.getThumbnail(),
+                snapshot != null ? snapshot.tags() : project.getTags(),
                 project.getModifiedDate(),
                 ctx.voteCounts().getOrDefault(project.getId(), 0L),
                 ctx.votedProjectIds().contains(project.getId()),
@@ -1054,9 +1188,18 @@ public class ProjectService {
     }
 
     public List<TagCountDTO> getHotTopics(int limit) {
+        List<Project> published = projectRepository.findByVisibilityOrderByModifiedDateDesc("published");
+        List<Long> ids = published.stream().map(Project::getId).toList();
+        Map<Long, ProjectSnapshotData> snapshotDataByProjectId = ids.isEmpty() ? Map.of()
+                : projectSnapshotRepository.findLatestPublishByProjectIdIn(ids).stream()
+                        .collect(Collectors.toMap(s -> s.getProject().getId(),
+                                s -> objectMapper.readValue(s.getContent(), ProjectSnapshotData.class)));
+
         Map<String, Long> counts = new LinkedHashMap<>();
-        for (Project project : projectRepository.findByVisibilityOrderByModifiedDateDesc("published")) {
-            for (String tag : splitTags(project.getTags())) {
+        for (Project project : published) {
+            ProjectSnapshotData snapshot = snapshotDataByProjectId.get(project.getId());
+            String tags = snapshot != null ? snapshot.tags() : project.getTags();
+            for (String tag : splitTags(tags)) {
                 counts.merge(tag, 1L, Long::sum);
             }
         }

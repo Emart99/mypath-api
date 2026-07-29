@@ -28,4 +28,10 @@ public interface TrailItemRepository extends JpaRepository<TrailItem, Long> {
 
     @Query("SELECT pi FROM TrailItem pi JOIN FETCH pi.item i LEFT JOIN FETCH i.content WHERE pi.trail.id IN :trailIds ORDER BY pi.orderIndex ASC, pi.id ASC")
     List<TrailItem> findByTrailIdInWithItemAndContent(@Param("trailIds") List<Long> trailIds);
+
+    // Same as above plus the step's association — used by snapshot-building, which reads both
+    // content and association for every step across every trail in one round trip.
+    @Query("SELECT pi FROM TrailItem pi JOIN FETCH pi.item i LEFT JOIN FETCH i.content " +
+            "LEFT JOIN FETCH pi.association WHERE pi.trail.id IN :trailIds ORDER BY pi.trail.id ASC, pi.orderIndex ASC, pi.id ASC")
+    List<TrailItem> findByTrailIdInWithItemContentAndAssociation(@Param("trailIds") List<Long> trailIds);
 }
