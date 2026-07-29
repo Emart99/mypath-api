@@ -2,8 +2,10 @@ package com.tramo.backend.project;
 
 import com.tramo.backend.AbstractIntegrationTest;
 import com.tramo.backend.project.entity.Project;
+import com.tramo.backend.project.repository.ProjectSnapshotRepository;
 import com.tramo.backend.user.entity.User;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -13,6 +15,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class SnapshotTest extends AbstractIntegrationTest {
+
+    @Autowired
+    private ProjectSnapshotRepository projectSnapshotRepository;
 
     private Project seedProject(User owner, String title) throws Exception {
         return createProject(owner, title, "private", "A description", "java,testing");
@@ -87,7 +92,7 @@ class SnapshotTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void forkingCreatesUnversionedSnapshotOnSourceProject() throws Exception {
+    void forkingDoesNotCreateAStraySnapshot() throws Exception {
         User owner = createUser("snapowner3");
         User forker = createUser("snapforker3");
         Project project = seedProject(owner, "Forkable");
@@ -95,11 +100,87 @@ class SnapshotTest extends AbstractIntegrationTest {
 
         postForProjectId(forker, "/api/project/" + pid(project) + "/fork", "");
 
-        // The fork's snapshot belongs to the source project but isn't a numbered version.
+        // Forking sources from the existing PUBLISH snapshot directly — it doesn't write
+        // a snapshot of its own (a "FORK"-trigger row was dead storage; nothing ever read it).
+        assertThat(projectSnapshotRepository.count()).isEqualTo(1);
         mockMvc.perform(get("/api/project/" + pid(project) + "/versions").header("Authorization", bearer(owner)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(1)))
                 .andExpect(jsonPath("$[0].version").value(1));
+    }
+
+    @Test
+    void forkCopiesPublishedContentNotUnpublishedLiveEdits() throws Exception {
+        User owner = createUser("snapowner9");
+        User forker = createUser("snapforker9");
+        Project project = seedProject(owner, "Draftable");
+        long trailId = postForId(owner, "/api/project/" + pid(project) + "/trail", """
+                {"title":"Trail 0"}""");
+        long itemId = postForId(owner, "/api/trail/" + trailId + "/item", """
+                {"title":"Item 0"}""");
+        mockMvc.perform(put("/api/item/" + itemId + "/content")
+                        .header("Authorization", bearer(owner))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content":"Published content"}"""))
+                .andExpect(status().isNoContent());
+
+        setVisibility(owner, project, "published");
+
+        // Edit after publish — never republished, so this should stay invisible to forkers.
+        mockMvc.perform(put("/api/item/" + itemId + "/content")
+                        .header("Authorization", bearer(owner))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content":"Unpublished draft edit"}"""))
+                .andExpect(status().isNoContent());
+
+        String forkId = postForProjectId(forker, "/api/project/" + pid(project) + "/fork", "");
+        long forkedItemId = firstItemIdOfFork(forkId, forker);
+
+        mockMvc.perform(get("/api/item/" + forkedItemId + "/content").header("Authorization", bearer(forker)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").value("Published content"));
+    }
+
+    // Items belong to the project via trail membership, not the project_id FK (that's only
+    // set for "loose" items) — so fetching a fork's items means walking its (single) trail.
+    private long firstItemIdOfFork(String forkId, User forker) throws Exception {
+        String trailsJson = mockMvc.perform(get("/api/project/" + forkId + "/trail").header("Authorization", bearer(forker)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long trailId = ((Number) com.jayway.jsonpath.JsonPath.read(trailsJson, "$[0].id")).longValue();
+
+        String itemsJson = mockMvc.perform(get("/api/trail/" + trailId + "/item").header("Authorization", bearer(forker)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return ((Number) com.jayway.jsonpath.JsonPath.read(itemsJson, "$[0].id")).longValue();
+    }
+
+    @Test
+    void forkOfNeverPublishedUnlistedProjectUsesLiveContent() throws Exception {
+        User owner = createUser("snapowner10");
+        User forker = createUser("snapforker10");
+        Project project = seedProject(owner, "UnlistedOnly");
+        long trailId = postForId(owner, "/api/project/" + pid(project) + "/trail", """
+                {"title":"Trail 0"}""");
+        long itemId = postForId(owner, "/api/trail/" + trailId + "/item", """
+                {"title":"Item 0"}""");
+        mockMvc.perform(put("/api/item/" + itemId + "/content")
+                        .header("Authorization", bearer(owner))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content":"Never published content"}"""))
+                .andExpect(status().isNoContent());
+        // Unlisted, never published — no PUBLISH snapshot exists, so fork must fall back to live tables.
+        setVisibility(owner, project, "unlisted");
+
+        String forkId = postForProjectId(forker, "/api/project/" + pid(project) + "/fork", "");
+        long forkedItemId = firstItemIdOfFork(forkId, forker);
+
+        mockMvc.perform(get("/api/item/" + forkedItemId + "/content").header("Authorization", bearer(forker)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").value("Never published content"));
     }
 
     @Test

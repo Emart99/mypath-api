@@ -13,6 +13,7 @@ import com.tramo.backend.trail.entity.Item;
 import com.tramo.backend.trail.entity.ItemContent;
 import com.tramo.backend.trail.entity.Association;
 import com.tramo.backend.trail.entity.AssociationTargetType;
+import com.tramo.backend.trail.entity.AssociationType;
 import com.tramo.backend.trail.entity.Trail;
 import com.tramo.backend.trail.entity.TrailItem;
 import com.tramo.backend.trail.dto.AssociationDTO;
@@ -349,8 +350,6 @@ public class ProjectService {
             throw new AccessDeniedException("Cannot fork this project");
         }
 
-        createSnapshot(source, "FORK");
-
         Project fork = new Project();
         fork.setTitle(source.getTitle());
         fork.setDescription(source.getDescription());
@@ -363,6 +362,23 @@ public class ProjectService {
         fork.setModifiedDate(new Date());
         fork = projectRepository.save(fork);
 
+        // Fork what the author actually published, not whatever half-edited state
+        // happens to be sitting in the live tables. Only unlisted projects that were
+        // never published (no PUBLISH snapshot exists yet) fall back to live content.
+        Optional<ProjectSnapshot> latestPublish = projectSnapshotRepository
+                .findLatestPublishByProjectIdIn(List.of(sourceProjectId)).stream().findFirst();
+        if (latestPublish.isPresent()) {
+            forkFromSnapshot(fork, latestPublish.get());
+        } else {
+            forkFromLiveTables(fork, sourceProjectId);
+        }
+
+        notificationService.recordEvent(source.getOwner(), "FORK", source, requester);
+        checkAndAwardBadges(source.getOwner());
+        return toResponse(fork);
+    }
+
+    private void forkFromLiveTables(Project fork, Long sourceProjectId) {
         Map<Long, Item> itemCopies = new HashMap<>();
         Map<Long, Trail> trailCopies = new HashMap<>();
         // Track source→copy step pairs so we can wire each step's association after
@@ -433,10 +449,6 @@ public class ProjectService {
             copy.setAssociation(newAssoc);
             trailItemRepository.save(copy);
         }
-
-        notificationService.recordEvent(source.getOwner(), "FORK", source, requester);
-        checkAndAwardBadges(source.getOwner());
-        return toResponse(fork);
     }
 
     private Item copyItem(Item source) {
@@ -448,6 +460,94 @@ public class ProjectService {
         if (source.getContent() != null) {
             ItemContent contentCopy = new ItemContent();
             contentCopy.setContent(source.getContent().getContent());
+            contentCopy.setUpdatedDate(new Date());
+            copy.setContent(contentCopy);
+        }
+        return itemRepository.save(copy);
+    }
+
+    // Materializes a fork from the frozen PUBLISH blob instead of the source project's live
+    // (possibly half-edited) tables — forking should copy what the author decided to show the
+    // world, not their in-progress draft.
+    private void forkFromSnapshot(Project fork, ProjectSnapshot snapshot) {
+        ProjectSnapshotData data = objectMapper.readValue(snapshot.getContent(), ProjectSnapshotData.class);
+
+        Map<Long, Item> itemCopies = new HashMap<>();
+        List<Long> stepArrivalAssociationIds = new ArrayList<>();
+        List<TrailItem> copiedSteps = new ArrayList<>();
+
+        for (ProjectSnapshotData.TrailData trailData : data.trails()) {
+            Trail trailCopy = new Trail();
+            trailCopy.setTitle(trailData.title());
+            trailCopy.setDescription(trailData.description());
+            trailCopy.setVisibility(trailData.visibility());
+            trailCopy.setCreationDate(new Date());
+            trailCopy.setModifiedDate(new Date());
+            trailCopy.setProject(fork);
+            trailCopy.setForkedFrom(trailRepository.findById(trailData.id()).orElse(null));
+            trailCopy = trailRepository.save(trailCopy);
+
+            int orderIndex = 0;
+            for (ProjectSnapshotData.ItemData itemData : trailData.items()) {
+                Item itemCopy = itemCopies.computeIfAbsent(itemData.id(), ignored -> copyItemFromData(itemData));
+
+                TrailItem membershipCopy = new TrailItem();
+                membershipCopy.setTrail(trailCopy);
+                membershipCopy.setItem(itemCopy);
+                membershipCopy.setOrderIndex(orderIndex++);
+                membershipCopy.setAnnotation(itemData.annotation());
+                membershipCopy = trailItemRepository.save(membershipCopy);
+                stepArrivalAssociationIds.add(itemData.associationId());
+                copiedSteps.add(membershipCopy);
+            }
+        }
+
+        // Rebuild each item's outgoing associations. The snapshot only embeds ITEM-target
+        // associations (see createSnapshot), so a step that arrived via a TRAIL-target
+        // association can't be resolved from the blob alone — dropped below, same as
+        // any other association forkFromLiveTables can't resolve.
+        Map<Long, Association> assocCopies = new HashMap<>();
+        for (ProjectSnapshotData.TrailData trailData : data.trails()) {
+            for (ProjectSnapshotData.ItemData itemData : trailData.items()) {
+                Item sourceCopy = itemCopies.get(itemData.id());
+                for (ProjectSnapshotData.AssociationData assocData : itemData.associations()) {
+                    if (assocCopies.containsKey(assocData.id())) continue;
+                    Item targetCopy = itemCopies.get(assocData.targetId());
+                    if (targetCopy == null) continue;
+
+                    Association copy = new Association();
+                    copy.setSourceItem(sourceCopy);
+                    copy.setType(AssociationType.valueOf(assocData.type()));
+                    copy.setTargetType(AssociationTargetType.ITEM);
+                    copy.setTargetId(targetCopy.getId());
+                    copy.setCreatedDate(new Date());
+                    assocCopies.put(assocData.id(), itemLinkRepository.save(copy));
+                }
+            }
+        }
+
+        // Re-point each copied step at the copied association it arrived via (drop if unresolvable).
+        for (int i = 0; i < copiedSteps.size(); i++) {
+            Long srcAssocId = stepArrivalAssociationIds.get(i);
+            if (srcAssocId == null) continue;
+            Association newAssoc = assocCopies.get(srcAssocId);
+            if (newAssoc == null) continue;
+            TrailItem copy = copiedSteps.get(i);
+            copy.setAssociation(newAssoc);
+            trailItemRepository.save(copy);
+        }
+    }
+
+    private Item copyItemFromData(ProjectSnapshotData.ItemData itemData) {
+        Item copy = new Item();
+        copy.setTitle(itemData.title());
+        copy.setType(itemData.type());
+        copy.setTitleAlign(itemData.titleAlign());
+        copy.setCreatedDate(new Date());
+        copy.setModifiedDate(new Date());
+        if (itemData.content() != null) {
+            ItemContent contentCopy = new ItemContent();
+            contentCopy.setContent(itemData.content());
             contentCopy.setUpdatedDate(new Date());
             copy.setContent(contentCopy);
         }
@@ -491,7 +591,8 @@ public class ProjectService {
                     trail.getVisibility(), trail.getVersion(),
                     trail.getForkedFrom() != null ? trail.getForkedFrom().getId() : null, items));
         }
-        ProjectSnapshotData data = new ProjectSnapshotData(project.getId(), project.getTitle(), project.getDescription(),
+        ProjectSnapshotData data = new ProjectSnapshotData(ProjectSnapshotData.CURRENT_SCHEMA_VERSION,
+                project.getId(), project.getTitle(), project.getDescription(),
                 project.getVisibility(), project.getThumbnail(), project.getTags(), trails);
 
         ProjectSnapshot snapshot = new ProjectSnapshot();
