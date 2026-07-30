@@ -8,6 +8,7 @@ import com.tramo.backend.moderation.repository.CommentReportRepository;
 import com.tramo.backend.moderation.repository.ProjectReportRepository;
 import com.tramo.backend.notification.service.NotificationService;
 import com.tramo.backend.subscription.service.SubscriptionService;
+import com.tramo.backend.tag.service.TagService;
 import com.tramo.backend.upload.repository.UploadRecordRepository;
 import com.tramo.backend.trail.entity.Item;
 import com.tramo.backend.trail.entity.ItemContent;
@@ -122,6 +123,7 @@ public class ProjectService {
     private final UploadRecordRepository uploadRecordRepository;
     private final ProjectSnapshotRepository projectSnapshotRepository;
     private final ObjectMapper objectMapper;
+    private final TagService tagService;
 
     public ProjectService(ProjectRepository projectRepository, TrailRepository trailRepository,
                            TrailItemRepository trailItemRepository, ItemRepository itemRepository,
@@ -134,7 +136,9 @@ public class ProjectService {
                            CommentReportRepository commentReportRepository, ProjectIdCodec projectIdCodec,
                            R2Client r2Client, SubscriptionService subscriptionService,
                            UploadRecordRepository uploadRecordRepository,
-                           ProjectSnapshotRepository projectSnapshotRepository, ObjectMapper objectMapper) {
+                           ProjectSnapshotRepository projectSnapshotRepository, ObjectMapper objectMapper,
+                           TagService tagService) {
+        this.tagService = tagService;
         this.subscriptionService = subscriptionService;
         this.uploadRecordRepository = uploadRecordRepository;
         this.projectSnapshotRepository = projectSnapshotRepository;
@@ -159,6 +163,7 @@ public class ProjectService {
         this.r2Client = r2Client;
     }
 
+    @Transactional
     public ProjectResponseDTO create(ProjectRequestDTO request, User owner) {
         if (request.getTitle() == null || request.getTitle().isBlank()) {
             throw new IllegalArgumentException("Title is required");
@@ -171,6 +176,7 @@ public class ProjectService {
         project.setOwner(owner);
         project.setCreationDate(new Date());
         project.setModifiedDate(new Date());
+        tagService.applyProjectTags(project, splitTags(project.getTags()), owner.getId());
         return toResponse(projectRepository.save(project));
     }
 
@@ -191,6 +197,7 @@ public class ProjectService {
         return toResponse(getOwnedProject(id, requester));
     }
 
+    @Transactional
     public ProjectResponseDTO update(Long id, ProjectRequestDTO request, User requester) {
         Project project = getOwnedProject(id, requester);
         String previousVisibility = project.getVisibility();
@@ -222,6 +229,7 @@ public class ProjectService {
         }
         if (request.getTags() != null) {
             project.setTags(normalizeTags(request.getTags()));
+            tagService.applyProjectTags(project, splitTags(project.getTags()), requester.getId());
             touchesModifiedDate = true;
         }
         if (touchesModifiedDate) {
@@ -294,6 +302,7 @@ public class ProjectService {
     @Transactional
     public void delete(Long id, User requester) {
         Project project = getOwnedProject(id, requester);
+        tagService.applyProjectTags(project, List.of(), requester.getId());
         for (Trail trail : trailRepository.findByProjectId(id)) {
             List<TrailItem> memberships = trailItemRepository.findByTrailIdOrderByOrderIndexAsc(trail.getId());
             for (TrailItem membership : memberships) {
@@ -360,6 +369,7 @@ public class ProjectService {
         fork.setForkedFrom(source);
         fork.setCreationDate(new Date());
         fork.setModifiedDate(new Date());
+        tagService.applyProjectTags(fork, splitTags(fork.getTags()), requester.getId());
         fork = projectRepository.save(fork);
 
         Optional<ProjectSnapshot> latestPublish = projectSnapshotRepository
@@ -886,7 +896,7 @@ public class ProjectService {
     @PostConstruct
     @Scheduled(fixedRate = EXPLORE_CACHE_REFRESH_MS)
     public void refreshExploreCache() {
-        cachedHotTopics = getHotTopics(10);
+        cachedHotTopics = getHotTopics(5);
         cachedActiveAuthors = getActiveAuthors(5);
     }
 
@@ -1352,25 +1362,8 @@ public class ProjectService {
     }
 
     public List<TagCountDTO> getHotTopics(int limit) {
-        List<Project> published = projectRepository.findByVisibilityOrderByModifiedDateDesc("published");
-        List<Long> ids = published.stream().map(Project::getId).toList();
-        Map<Long, ProjectSnapshotData> snapshotDataByProjectId = ids.isEmpty() ? Map.of()
-                : projectSnapshotRepository.findLatestPublishByProjectIdIn(ids).stream()
-                        .collect(Collectors.toMap(s -> s.getProject().getId(),
-                                s -> objectMapper.readValue(s.getContent(), ProjectSnapshotData.class)));
-
-        Map<String, Long> counts = new LinkedHashMap<>();
-        for (Project project : published) {
-            ProjectSnapshotData snapshot = snapshotDataByProjectId.get(project.getId());
-            String tags = snapshot != null ? snapshot.tags() : project.getTags();
-            for (String tag : splitTags(tags)) {
-                counts.merge(tag, 1L, Long::sum);
-            }
-        }
-        return counts.entrySet().stream()
-                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .limit(limit)
-                .map(entry -> new TagCountDTO(entry.getKey(), entry.getValue()))
+        return tagService.hotTopics(limit).stream()
+                .map(tag -> new TagCountDTO(tag.getName(), tag.getUsageCount()))
                 .toList();
     }
 

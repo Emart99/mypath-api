@@ -262,7 +262,14 @@ class ProjectCrudTest extends AbstractIntegrationTest {
     @Test
     void publicTagsReturnsHotTopics() throws Exception {
         User author = createUser("tagauthor");
-        createProject(author, "Tagged", "published", "d", "popular");
+        // Tags only surface in hot topics once usage crosses the anti-spam threshold (3),
+        // so tag it on three real projects through the actual create flow.
+        postForProjectId(author, "/api/project", """
+                {"title":"Tagged 1","tags":"popular"}""");
+        postForProjectId(author, "/api/project", """
+                {"title":"Tagged 2","tags":"popular"}""");
+        postForProjectId(author, "/api/project", """
+                {"title":"Tagged 3","tags":"popular"}""");
 
         mockMvc.perform(get("/api/public/tags"))
                 .andExpect(status().isOk())

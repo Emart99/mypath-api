@@ -128,6 +128,10 @@ class RemainingListQueryCountTest extends AbstractIntegrationTest {
         User author = createUser("rlqctags");
         published(author, "Tag 0", "java,testing");
 
+        // Warm the tag cache first: the very first hit after a cold start costs one query
+        // to load it, every hit after that is served from memory - measure both sides warm.
+        mockMvc.perform(get("/api/public/tags")).andExpect(status().isOk());
+
         long small = queryCount(() -> mockMvc.perform(get("/api/public/tags"))
                 .andExpect(status().isOk()));
 

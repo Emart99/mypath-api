@@ -65,7 +65,7 @@ public class PublicProjectController {
 
     @GetMapping("/tags")
     public ResponseEntity<List<TagCountDTO>> getHotTopics() {
-        return ResponseEntity.ok(projectService.getHotTopics(10));
+        return ResponseEntity.ok(projectService.getHotTopics(5));
     }
 
     @GetMapping("/users/{username}")

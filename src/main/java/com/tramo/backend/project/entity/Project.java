@@ -1,5 +1,6 @@
 package com.tramo.backend.project.entity;
 
+import com.tramo.backend.tag.entity.Tag;
 import com.tramo.backend.trail.entity.Trail;
 import com.tramo.backend.user.entity.User;
 import jakarta.persistence.*;
@@ -8,7 +9,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Getter
@@ -51,4 +54,12 @@ public class Project {
 
     @OneToMany(mappedBy = "project")
     private List<Trail> trails;
+
+    // Normalized tag system (see com.tramo.backend.tag); `tags` above stays as the free-text
+    // display/search string, this join tracks per-tag usage_count for the tag catalog/cache.
+    @ManyToMany
+    @JoinTable(name = "project_tag",
+            joinColumns = @JoinColumn(name = "project_id"),
+            inverseJoinColumns = @JoinColumn(name = "tag_id"))
+    private Set<Tag> projectTags = new HashSet<>();
 }
