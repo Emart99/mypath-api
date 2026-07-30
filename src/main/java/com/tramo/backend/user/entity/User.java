@@ -52,6 +52,7 @@ public class User implements UserDetails {
     @OneToMany(mappedBy="owner")
     private List<Project> projects;
     private Role role;
+    private String selectedBadge;
     @Column(columnDefinition = "boolean default true")
     private boolean emailVerified;
 

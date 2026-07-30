@@ -16,6 +16,7 @@ public class ProjectFeedItemDTO {
     private String description;
     private String ownerUsername;
     private String ownerAvatar;
+    private String ownerBadge;
     private String thumbnail;
     private String tags;
     private Date modifiedDate;

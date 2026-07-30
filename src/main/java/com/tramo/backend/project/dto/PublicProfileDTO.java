@@ -21,6 +21,7 @@ public class PublicProfileDTO {
     private Date createdAt;
     private ProfileStatsDTO stats;
     private List<BadgeDTO> badges;
+    private String selectedBadge;
     private boolean following;
     private boolean self;
     private boolean blocked;

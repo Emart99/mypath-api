@@ -15,6 +15,7 @@ public class CommentDTO {
     private boolean deleted;
     private String authorUsername;
     private String authorAvatar;
+    private String authorBadge;
     private Long parentId;
     private Date createdDate;
     private boolean canDelete;

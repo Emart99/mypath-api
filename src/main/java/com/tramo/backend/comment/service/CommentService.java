@@ -112,6 +112,7 @@ public class CommentService {
                 comment.isDeleted(),
                 comment.getAuthor() != null ? comment.getAuthor().getUsername() : null,
                 comment.getAuthor() != null ? comment.getAuthor().getImageUrl() : null,
+                comment.getAuthor() != null ? comment.getAuthor().getSelectedBadge() : null,
                 comment.getParent() != null ? comment.getParent().getId() : null,
                 comment.getCreatedDate(),
                 !comment.isDeleted() && (isAuthor || isProjectOwner || isAdmin)

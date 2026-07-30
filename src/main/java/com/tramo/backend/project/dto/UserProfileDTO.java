@@ -21,4 +21,5 @@ public class UserProfileDTO {
     private String bannerUrl;
     private Date createdAt;
     private String role;
+    private String selectedBadge;
 }

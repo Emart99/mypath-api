@@ -939,7 +939,7 @@ public class ProjectService {
     }
 
     public UserProfileDTO getProfile(User user) {
-        return new UserProfileDTO(user.getUsername(), user.getEmail(), user.getBio(), user.getBirthDate(), user.getLocation(), user.getWebsite(), user.getImageUrl(), user.getBannerUrl(), user.getCreatedAt(), user.getRole().name());
+        return new UserProfileDTO(user.getUsername(), user.getEmail(), user.getBio(), user.getBirthDate(), user.getLocation(), user.getWebsite(), user.getImageUrl(), user.getBannerUrl(), user.getCreatedAt(), user.getRole().name(), user.getSelectedBadge());
     }
 
     private Integer computeAge(LocalDate birthDate) {
@@ -968,6 +968,17 @@ public class ProjectService {
         if (request.getBannerUrl() != null) {
             user.setBannerUrl(request.getBannerUrl().isBlank() ? null : request.getBannerUrl());
         }
+        if (request.getSelectedBadge() != null) {
+            String badgeCode = request.getSelectedBadge().isBlank() ? null : request.getSelectedBadge();
+            if (badgeCode != null) {
+                boolean earned = userBadgeRepository.findByUserId(user.getId()).stream()
+                        .anyMatch(ub -> ub.getBadgeCode().equals(badgeCode));
+                if (!earned) {
+                    throw new IllegalArgumentException("Badge not earned: " + badgeCode);
+                }
+            }
+            user.setSelectedBadge(badgeCode);
+        }
         User saved = userRepository.save(user);
         if (request.getImageUrl() != null && !request.getImageUrl().equals(previousImageUrl)) {
             r2Client.deleteByPublicUrl(previousImageUrl);
@@ -975,7 +986,7 @@ public class ProjectService {
         if (request.getBannerUrl() != null && !request.getBannerUrl().equals(previousBannerUrl)) {
             r2Client.deleteByPublicUrl(previousBannerUrl);
         }
-        return new UserProfileDTO(saved.getUsername(), saved.getEmail(), saved.getBio(), saved.getBirthDate(), saved.getLocation(), saved.getWebsite(), saved.getImageUrl(), saved.getBannerUrl(), saved.getCreatedAt(), saved.getRole().name());
+        return new UserProfileDTO(saved.getUsername(), saved.getEmail(), saved.getBio(), saved.getBirthDate(), saved.getLocation(), saved.getWebsite(), saved.getImageUrl(), saved.getBannerUrl(), saved.getCreatedAt(), saved.getRole().name(), saved.getSelectedBadge());
     }
 
     private ProfileStatsDTO getProfileStats(User user) {
@@ -1073,7 +1084,7 @@ public class ProjectService {
 
         Integer publicAge = Boolean.FALSE.equals(target.getShowAge()) ? null : computeAge(target.getBirthDate());
         return new PublicProfileDTO(target.getUsername(), target.getBio(), publicAge, target.getLocation(), target.getWebsite(), target.getImageUrl(), target.getBannerUrl(), target.getCreatedAt(),
-                stats, buildBadges(stats, subscriptionService.isSupporter(target)), following, self, blocked);
+                stats, buildBadges(stats, subscriptionService.isSupporter(target)), target.getSelectedBadge(), following, self, blocked);
     }
 
     public PageResponseDTO<ProjectFeedItemDTO> getPublishedPageForUser(String username, User requester, int page, int size) {
@@ -1291,6 +1302,7 @@ public class ProjectService {
                 snapshot != null ? snapshot.description() : project.getDescription(),
                 project.getOwner().getUsername(),
                 project.getOwner().getImageUrl(),
+                project.getOwner().getSelectedBadge(),
                 snapshot != null ? snapshot.thumbnail() : project.getThumbnail(),
                 snapshot != null ? snapshot.tags() : project.getTags(),
                 project.getModifiedDate(),

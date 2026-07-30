@@ -14,4 +14,5 @@ public class UpdateProfileRequestDTO {
     private String website;
     private String imageUrl;
     private String bannerUrl;
+    private String selectedBadge;
 }
