@@ -263,8 +263,6 @@ public class ProjectService {
         project.setModifiedDate(new Date());
         project = projectRepository.save(project);
 
-        // ponytail: publishing the project bumps every trail's version.
-        // Move this to a per-trail publish if that granularity is ever added.
         for (Trail trail : trailRepository.findByProjectId(project.getId())) {
             trail.setVersion(trail.getVersion() + 1);
             trailRepository.save(trail);
@@ -362,9 +360,6 @@ public class ProjectService {
         fork.setModifiedDate(new Date());
         fork = projectRepository.save(fork);
 
-        // Fork what the author actually published, not whatever half-edited state
-        // happens to be sitting in the live tables. Only unlisted projects that were
-        // never published (no PUBLISH snapshot exists yet) fall back to live content.
         Optional<ProjectSnapshot> latestPublish = projectSnapshotRepository
                 .findLatestPublishByProjectIdIn(List.of(sourceProjectId)).stream().findFirst();
         if (latestPublish.isPresent()) {
@@ -466,9 +461,6 @@ public class ProjectService {
         return itemRepository.save(copy);
     }
 
-    // Materializes a fork from the frozen PUBLISH blob instead of the source project's live
-    // (possibly half-edited) tables — forking should copy what the author decided to show the
-    // world, not their in-progress draft.
     private void forkFromSnapshot(Project fork, ProjectSnapshot snapshot) {
         ProjectSnapshotData data = objectMapper.readValue(snapshot.getContent(), ProjectSnapshotData.class);
 
@@ -502,10 +494,6 @@ public class ProjectService {
             }
         }
 
-        // Rebuild each item's outgoing associations. The snapshot only embeds ITEM-target
-        // associations (see createSnapshot), so a step that arrived via a TRAIL-target
-        // association can't be resolved from the blob alone — dropped below, same as
-        // any other association forkFromLiveTables can't resolve.
         Map<Long, Association> assocCopies = new HashMap<>();
         for (ProjectSnapshotData.TrailData trailData : data.trails()) {
             for (ProjectSnapshotData.ItemData itemData : trailData.items()) {
@@ -526,7 +514,6 @@ public class ProjectService {
             }
         }
 
-        // Re-point each copied step at the copied association it arrived via (drop if unresolvable).
         for (int i = 0; i < copiedSteps.size(); i++) {
             Long srcAssocId = stepArrivalAssociationIds.get(i);
             if (srcAssocId == null) continue;
@@ -641,7 +628,6 @@ public class ProjectService {
         Project project = projectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Version not found"));
         if (project.getFirstPublishedDate() == null) {
-            // Never published — no version of this project is publicly linkable.
             throw new ResourceNotFoundException("Version not found");
         }
         ProjectSnapshot snapshot = projectSnapshotRepository.findById(snapshotId)
@@ -815,7 +801,7 @@ public class ProjectService {
         }
 
         FeedContext ctx = FeedContext.forPublishedProjects(pageProjects, requester, projectRepository, projectVoteRepository,
-                projectBookmarkRepository, commentRepository, projectSnapshotRepository, objectMapper);
+                projectBookmarkRepository, commentRepository, projectSnapshotRepository);
         List<ProjectFeedItemDTO> feed = pageProjects.stream()
                 .map(project -> toFeedItem(project, ctx))
                 .toList();
@@ -828,7 +814,7 @@ public class ProjectService {
                 featured = projectRepository.findByFeaturedTrue()
                         .filter(project -> "published".equals(project.getVisibility()))
                         .map(project -> toFeedItem(project, FeedContext.forPublishedProjects(List.of(project), requester, projectRepository,
-                                projectVoteRepository, projectBookmarkRepository, commentRepository, projectSnapshotRepository, objectMapper)))
+                                projectVoteRepository, projectBookmarkRepository, commentRepository, projectSnapshotRepository)))
                         .orElse(null);
             }
             hotTopics = cachedHotTopics;
@@ -1198,7 +1184,7 @@ public class ProjectService {
     // each project's frozen snapshot content instead of live edits.
     private List<ProjectFeedItemDTO> toPublishedFeedItems(List<Project> projects, User requester) {
         FeedContext ctx = FeedContext.forPublishedProjects(projects, requester, projectRepository, projectVoteRepository,
-                projectBookmarkRepository, commentRepository, projectSnapshotRepository, objectMapper);
+                projectBookmarkRepository, commentRepository, projectSnapshotRepository);
         return projects.stream().map(project -> toFeedItem(project, ctx)).toList();
     }
 
@@ -1209,7 +1195,7 @@ public class ProjectService {
 
     private record FeedContext(Map<Long, Long> voteCounts, Map<Long, Long> forkCounts, Map<Long, Long> commentCounts,
                                 Set<Long> votedProjectIds, Set<Long> bookmarkedProjectIds,
-                                Map<Long, ProjectSnapshotData> snapshotDataByProjectId) {
+                                Map<Long, ProjectSnapshot> latestPublishByProjectId) {
         static FeedContext forProjects(
                 List<Project> projects,
                 User requester,
@@ -1264,22 +1250,25 @@ public class ProjectService {
                 ProjectVoteRepository voteRepository,
                 ProjectBookmarkRepository bookmarkRepository,
                 CommentRepository commentRepository,
-                ProjectSnapshotRepository snapshotRepository,
-                ObjectMapper objectMapper
+                ProjectSnapshotRepository snapshotRepository
         ) {
             FeedContext base = forProjects(projects, requester, projectRepository, voteRepository, bookmarkRepository, commentRepository);
             List<Long> ids = projects.stream().map(Project::getId).toList();
             if (ids.isEmpty()) return base;
-            Map<Long, ProjectSnapshotData> snapshotData = new HashMap<>();
+            Map<Long, ProjectSnapshot> latestPublish = new HashMap<>();
             for (ProjectSnapshot snapshot : snapshotRepository.findLatestPublishByProjectIdIn(ids)) {
-                snapshotData.put(snapshot.getProject().getId(), objectMapper.readValue(snapshot.getContent(), ProjectSnapshotData.class));
+                latestPublish.put(snapshot.getProject().getId(), snapshot);
             }
-            return new FeedContext(base.voteCounts(), base.forkCounts(), base.commentCounts(), base.votedProjectIds(), base.bookmarkedProjectIds(), snapshotData);
+            return new FeedContext(base.voteCounts(), base.forkCounts(), base.commentCounts(), base.votedProjectIds(), base.bookmarkedProjectIds(), latestPublish);
         }
     }
 
     private ProjectFeedItemDTO toFeedItem(Project project, FeedContext ctx) {
-        ProjectSnapshotData snapshot = ctx.snapshotDataByProjectId().get(project.getId());
+        ProjectSnapshot latestPublish = ctx.latestPublishByProjectId().get(project.getId());
+        ProjectSnapshotData snapshot = latestPublish != null
+                ? objectMapper.readValue(latestPublish.getContent(), ProjectSnapshotData.class) : null;
+        Date lastPublishedDate = latestPublish != null && latestPublish.getVersion() != null && latestPublish.getVersion() > 1
+                ? latestPublish.getCreatedDate() : null;
         return new ProjectFeedItemDTO(
                 projectIdCodec.encode(project.getId()),
                 snapshot != null ? snapshot.title() : project.getTitle(),
@@ -1289,6 +1278,8 @@ public class ProjectService {
                 snapshot != null ? snapshot.thumbnail() : project.getThumbnail(),
                 snapshot != null ? snapshot.tags() : project.getTags(),
                 project.getModifiedDate(),
+                project.getFirstPublishedDate(),
+                lastPublishedDate,
                 ctx.voteCounts().getOrDefault(project.getId(), 0L),
                 ctx.votedProjectIds().contains(project.getId()),
                 ctx.bookmarkedProjectIds().contains(project.getId()),

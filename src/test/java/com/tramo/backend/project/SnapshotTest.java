@@ -100,8 +100,6 @@ class SnapshotTest extends AbstractIntegrationTest {
 
         postForProjectId(forker, "/api/project/" + pid(project) + "/fork", "");
 
-        // Forking sources from the existing PUBLISH snapshot directly — it doesn't write
-        // a snapshot of its own (a "FORK"-trigger row was dead storage; nothing ever read it).
         assertThat(projectSnapshotRepository.count()).isEqualTo(1);
         mockMvc.perform(get("/api/project/" + pid(project) + "/versions").header("Authorization", bearer(owner)))
                 .andExpect(status().isOk())
@@ -127,7 +125,6 @@ class SnapshotTest extends AbstractIntegrationTest {
 
         setVisibility(owner, project, "published");
 
-        // Edit after publish — never republished, so this should stay invisible to forkers.
         mockMvc.perform(put("/api/item/" + itemId + "/content")
                         .header("Authorization", bearer(owner))
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
@@ -143,8 +140,6 @@ class SnapshotTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content").value("Published content"));
     }
 
-    // Items belong to the project via trail membership, not the project_id FK (that's only
-    // set for "loose" items) — so fetching a fork's items means walking its (single) trail.
     private long firstItemIdOfFork(String forkId, User forker) throws Exception {
         String trailsJson = mockMvc.perform(get("/api/project/" + forkId + "/trail").header("Authorization", bearer(forker)))
                 .andExpect(status().isOk())
@@ -172,7 +167,6 @@ class SnapshotTest extends AbstractIntegrationTest {
                         .content("""
                                 {"content":"Never published content"}"""))
                 .andExpect(status().isNoContent());
-        // Unlisted, never published — no PUBLISH snapshot exists, so fork must fall back to live tables.
         setVisibility(owner, project, "unlisted");
 
         String forkId = postForProjectId(forker, "/api/project/" + pid(project) + "/fork", "");
@@ -253,12 +247,10 @@ class SnapshotTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/project/" + pid(project) + "/publish").header("Authorization", bearer(owner)))
                 .andExpect(status().isOk());
 
-        // No Authorization header — this is the public, unauthenticated route.
         mockMvc.perform(get("/api/public/project/" + pid(project) + "/versions/" + v1Id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(1));
 
-        // Old versions stay linkable even after the project goes back to private.
         setVisibility(owner, project, "private");
         mockMvc.perform(get("/api/public/project/" + pid(project) + "/versions/" + v1Id))
                 .andExpect(status().isOk())
@@ -272,5 +264,32 @@ class SnapshotTest extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/api/public/project/" + pid(project) + "/versions/999"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void explorePublishedDateReflectsPublishHistory() throws Exception {
+        User owner = createUser("snapowner11");
+        Project project = seedProject(owner, "DatedProject");
+        setVisibility(owner, project, "published");
+
+        String feedJsonAfterFirstPublish = mockMvc.perform(get("/api/public/explore"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String feedIndexPath = "$.feed[?(@.title=='DatedProject')]";
+        String publishedDate = com.jayway.jsonpath.JsonPath.<java.util.List<String>>read(
+                feedJsonAfterFirstPublish, feedIndexPath + ".publishedDate").get(0);
+        assertThat(com.jayway.jsonpath.JsonPath.<java.util.List<Object>>read(
+                feedJsonAfterFirstPublish, feedIndexPath + ".lastPublishedDate").get(0)).isNull();
+
+        mockMvc.perform(post("/api/project/" + pid(project) + "/publish").header("Authorization", bearer(owner)))
+                .andExpect(status().isOk());
+
+        String feedJsonAfterRepublish = mockMvc.perform(get("/api/public/explore"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(com.jayway.jsonpath.JsonPath.<java.util.List<String>>read(
+                feedJsonAfterRepublish, feedIndexPath + ".publishedDate").get(0)).isEqualTo(publishedDate);
+        assertThat(com.jayway.jsonpath.JsonPath.<java.util.List<Object>>read(
+                feedJsonAfterRepublish, feedIndexPath + ".lastPublishedDate").get(0)).isNotNull();
     }
 }
