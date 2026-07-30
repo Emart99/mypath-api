@@ -30,6 +30,9 @@ public class UserPreferencesService {
         if (request.getShowUpvotes() != null) {
             user.setShowUpvotes(request.getShowUpvotes());
         }
+        if (request.getShowAge() != null) {
+            user.setShowAge(request.getShowAge());
+        }
         if (request.getAllowForks() != null) {
             user.setAllowForks(request.getAllowForks());
         }
@@ -48,6 +51,7 @@ public class UserPreferencesService {
                 Boolean.FALSE.equals(user.getVisibility()) ? "private" : "public",
                 user.getEmailDigestFrequency() != null ? user.getEmailDigestFrequency() : "weekly",
                 user.getShowUpvotes() == null || user.getShowUpvotes(),
+                user.getShowAge() == null || user.getShowAge(),
                 user.getAllowForks() == null || user.getAllowForks(),
                 user.getCommentsPolicy() != null ? user.getCommentsPolicy() : "everyone",
                 Boolean.TRUE.equals(user.getEditorTourSeen())

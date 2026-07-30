@@ -13,6 +13,9 @@ import java.util.List;
 public class PublicProfileDTO {
     private String username;
     private String bio;
+    private Integer age;
+    private String location;
+    private String website;
     private String imageUrl;
     private String bannerUrl;
     private Date createdAt;

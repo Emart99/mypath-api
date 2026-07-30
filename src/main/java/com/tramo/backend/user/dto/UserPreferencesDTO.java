@@ -9,6 +9,7 @@ public class UserPreferencesDTO {
     private String profileVisibility;
     private String emailDigestFrequency;
     private boolean showUpvotes;
+    private boolean showAge;
     private boolean allowForks;
     private String commentsPolicy;
     private boolean editorTourSeen;

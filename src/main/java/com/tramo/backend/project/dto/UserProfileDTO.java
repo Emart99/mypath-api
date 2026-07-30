@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.util.Date;
 
 @Getter
@@ -13,6 +14,9 @@ public class UserProfileDTO {
     private String username;
     private String email;
     private String bio;
+    private LocalDate birthDate;
+    private String location;
+    private String website;
     private String imageUrl;
     private String bannerUrl;
     private Date createdAt;

@@ -16,6 +16,8 @@ public class UpdatePreferencesRequestDTO {
 
     private Boolean showUpvotes;
 
+    private Boolean showAge;
+
     private Boolean allowForks;
 
     @Pattern(regexp = "everyone|following|noone", message = "commentsPolicy must be 'everyone', 'following', or 'noone'")

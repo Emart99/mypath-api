@@ -75,6 +75,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.LocalDate;
+import java.time.Period;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -937,7 +939,11 @@ public class ProjectService {
     }
 
     public UserProfileDTO getProfile(User user) {
-        return new UserProfileDTO(user.getUsername(), user.getEmail(), user.getBio(), user.getImageUrl(), user.getBannerUrl(), user.getCreatedAt(), user.getRole().name());
+        return new UserProfileDTO(user.getUsername(), user.getEmail(), user.getBio(), user.getBirthDate(), user.getLocation(), user.getWebsite(), user.getImageUrl(), user.getBannerUrl(), user.getCreatedAt(), user.getRole().name());
+    }
+
+    private Integer computeAge(LocalDate birthDate) {
+        return birthDate != null ? Period.between(birthDate, LocalDate.now()).getYears() : null;
     }
 
     @Transactional
@@ -946,6 +952,15 @@ public class ProjectService {
         String previousBannerUrl = user.getBannerUrl();
         if (request.getBio() != null) {
             user.setBio(request.getBio().isBlank() ? null : request.getBio());
+        }
+        if (request.getBirthDate() != null) {
+            user.setBirthDate(request.getBirthDate());
+        }
+        if (request.getLocation() != null) {
+            user.setLocation(request.getLocation().isBlank() ? null : request.getLocation());
+        }
+        if (request.getWebsite() != null) {
+            user.setWebsite(request.getWebsite().isBlank() ? null : request.getWebsite());
         }
         if (request.getImageUrl() != null) {
             user.setImageUrl(request.getImageUrl().isBlank() ? null : request.getImageUrl());
@@ -960,7 +975,7 @@ public class ProjectService {
         if (request.getBannerUrl() != null && !request.getBannerUrl().equals(previousBannerUrl)) {
             r2Client.deleteByPublicUrl(previousBannerUrl);
         }
-        return new UserProfileDTO(saved.getUsername(), saved.getEmail(), saved.getBio(), saved.getImageUrl(), saved.getBannerUrl(), saved.getCreatedAt(), saved.getRole().name());
+        return new UserProfileDTO(saved.getUsername(), saved.getEmail(), saved.getBio(), saved.getBirthDate(), saved.getLocation(), saved.getWebsite(), saved.getImageUrl(), saved.getBannerUrl(), saved.getCreatedAt(), saved.getRole().name());
     }
 
     private ProfileStatsDTO getProfileStats(User user) {
@@ -1056,7 +1071,8 @@ public class ProjectService {
         boolean blocked = !self && requester != null
                 && blockedUserRepository.findByBlockerIdAndBlockedId(requester.getId(), target.getId()).isPresent();
 
-        return new PublicProfileDTO(target.getUsername(), target.getBio(), target.getImageUrl(), target.getBannerUrl(), target.getCreatedAt(),
+        Integer publicAge = Boolean.FALSE.equals(target.getShowAge()) ? null : computeAge(target.getBirthDate());
+        return new PublicProfileDTO(target.getUsername(), target.getBio(), publicAge, target.getLocation(), target.getWebsite(), target.getImageUrl(), target.getBannerUrl(), target.getCreatedAt(),
                 stats, buildBadges(stats, subscriptionService.isSupporter(target)), following, self, blocked);
     }
 

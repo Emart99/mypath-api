@@ -12,6 +12,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
@@ -35,6 +36,12 @@ public class User implements UserDetails {
     private String phone;
     @Column(columnDefinition = "text")
     private String bio;
+    private LocalDate birthDate;
+    @Column(columnDefinition = "text")
+    private String location;
+    @Column(columnDefinition = "text")
+    private String website;
+    private Boolean showAge;
     @Column(columnDefinition = "text")
     private String imageUrl;
     @Column(columnDefinition = "text")

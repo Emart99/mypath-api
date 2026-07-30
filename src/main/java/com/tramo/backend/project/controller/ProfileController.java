@@ -9,6 +9,7 @@ import com.tramo.backend.project.dto.UpdateProfileRequestDTO;
 import com.tramo.backend.project.dto.UserProfileDTO;
 import com.tramo.backend.project.service.ProjectService;
 import com.tramo.backend.user.entity.User;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,7 +35,7 @@ public class ProfileController {
 
     @PutMapping("/me")
     public ResponseEntity<UserProfileDTO> updateProfile(@AuthenticationPrincipal User user,
-                                                          @RequestBody UpdateProfileRequestDTO request) {
+                                                          @Valid @RequestBody UpdateProfileRequestDTO request) {
         return ResponseEntity.ok(projectService.updateProfile(user, request));
     }
 
