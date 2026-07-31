@@ -415,7 +415,7 @@ class ProjectCrudTest extends AbstractIntegrationTest {
                         .header("Authorization", bearer(user))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"bio":"New bio","imageUrl":"https:
+                                {"bio":"New bio","imageUrl":"https://example.com/a.png"}"""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bio").value("New bio"));
     }
