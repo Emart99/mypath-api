@@ -31,7 +31,6 @@ public class Project {
     private String visibility;
     @Column(columnDefinition = "TEXT")
     private String thumbnail;
-    private String tags;
     private Date creationDate;
     private Date modifiedDate;
     private Date lastEditedDate;
@@ -55,8 +54,9 @@ public class Project {
     @OneToMany(mappedBy = "project")
     private List<Trail> trails;
 
-    // Normalized tag system (see com.tramo.backend.tag); `tags` above stays as the free-text
-    // display/search string, this join tracks per-tag usage_count for the tag catalog/cache.
+    // Normalized tag system (see com.tramo.backend.tag) — the single source of truth for
+    // a project's tags. Never lazy-load this for response-building; resolve names via
+    // ProjectRepository.findTagNamesGroupedByProjectIdIn instead (see ProjectService).
     @ManyToMany
     @JoinTable(name = "project_tag",
             joinColumns = @JoinColumn(name = "project_id"),

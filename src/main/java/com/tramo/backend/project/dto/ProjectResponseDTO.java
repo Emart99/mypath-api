@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.util.Date;
+import java.util.List;
 
 @Getter
 @Setter
@@ -15,7 +16,7 @@ public class ProjectResponseDTO {
     private String description;
     private String visibility;
     private String thumbnail;
-    private String tags;
+    private List<String> tags;
     private Date creationDate;
     private Date modifiedDate;
     private long storageBytes;

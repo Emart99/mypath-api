@@ -8,6 +8,7 @@ import com.tramo.backend.moderation.repository.CommentReportRepository;
 import com.tramo.backend.moderation.repository.ProjectReportRepository;
 import com.tramo.backend.notification.service.NotificationService;
 import com.tramo.backend.subscription.service.SubscriptionService;
+import com.tramo.backend.tag.entity.Tag;
 import com.tramo.backend.tag.service.TagService;
 import com.tramo.backend.upload.repository.UploadRecordRepository;
 import com.tramo.backend.trail.entity.Item;
@@ -172,12 +173,12 @@ public class ProjectService {
         project.setTitle(request.getTitle());
         project.setDescription(request.getDescription());
         project.setVisibility(request.getVisibility());
-        project.setTags(normalizeTags(request.getTags()));
         project.setOwner(owner);
         project.setCreationDate(new Date());
         project.setModifiedDate(new Date());
-        tagService.applyProjectTags(project, splitTags(project.getTags()), owner.getId());
-        return toResponse(projectRepository.save(project));
+        tagService.applyProjectTags(project, normalizeTagNames(request.getTags()), owner.getId());
+        Project saved = projectRepository.save(project);
+        return toResponse(saved, liveTagNames(saved));
     }
 
     public List<ProjectResponseDTO> getAllForUser(User owner) {
@@ -187,9 +188,11 @@ public class ProjectService {
                 .collect(Collectors.toMap(UploadRecordRepository.ProjectBytesSum::getProjectId, UploadRecordRepository.ProjectBytesSum::getBytes));
         Map<Long, Long> contentBytesByProjectId = itemRepository.sumContentBytesGroupedByProjectIdIn(projectIds).stream()
                 .collect(Collectors.toMap(ItemRepository.ProjectContentBytesSum::getProjectId, ItemRepository.ProjectContentBytesSum::getBytes));
+        Map<Long, List<String>> tagNamesByProjectId = tagNamesGroupedByProjectId(projectIds);
         return projects.stream()
                 .map(p -> toResponse(p, imageBytesByProjectId.getOrDefault(p.getId(), 0L)
-                        + contentBytesByProjectId.getOrDefault(p.getId(), 0L)))
+                        + contentBytesByProjectId.getOrDefault(p.getId(), 0L),
+                        tagNamesByProjectId.getOrDefault(p.getId(), List.of())))
                 .toList();
     }
 
@@ -228,14 +231,14 @@ public class ProjectService {
             project.setThumbnail(request.getThumbnail());
         }
         if (request.getTags() != null) {
-            project.setTags(normalizeTags(request.getTags()));
-            tagService.applyProjectTags(project, splitTags(project.getTags()), requester.getId());
+            tagService.applyProjectTags(project, normalizeTagNames(request.getTags()), requester.getId());
             touchesModifiedDate = true;
         }
         if (touchesModifiedDate) {
             project.setModifiedDate(new Date());
         }
-        ProjectResponseDTO response = toResponse(projectRepository.save(project));
+        Project savedProject = projectRepository.save(project);
+        ProjectResponseDTO response = toResponse(savedProject, liveTagNames(savedProject));
         if (request.getThumbnail() != null && !request.getThumbnail().equals(previousThumbnail)) {
             r2Client.deleteByPublicUrl(previousThumbnail);
         }
@@ -282,7 +285,7 @@ public class ProjectService {
         if (firstPublish) {
             notifyFollowers(project.getOwner(), "PUBLISH", project);
         }
-        return toResponse(project);
+        return toResponse(project, liveTagNames(project));
     }
 
     @Transactional
@@ -364,12 +367,11 @@ public class ProjectService {
         fork.setDescription(source.getDescription());
         fork.setVisibility("private");
         fork.setThumbnail(source.getThumbnail());
-        fork.setTags(source.getTags());
         fork.setOwner(requester);
         fork.setForkedFrom(source);
         fork.setCreationDate(new Date());
         fork.setModifiedDate(new Date());
-        tagService.applyProjectTags(fork, splitTags(fork.getTags()), requester.getId());
+        tagService.applyProjectTags(fork, liveTagNames(source), requester.getId());
         fork = projectRepository.save(fork);
 
         Optional<ProjectSnapshot> latestPublish = projectSnapshotRepository
@@ -382,7 +384,7 @@ public class ProjectService {
 
         notificationService.recordEvent(source.getOwner(), "FORK", source, requester);
         checkAndAwardBadges(source.getOwner());
-        return toResponse(fork);
+        return toResponse(fork, liveTagNames(fork));
     }
 
     private void forkFromLiveTables(Project fork, Long sourceProjectId) {
@@ -590,9 +592,11 @@ public class ProjectService {
                     trail.getVisibility(), trail.getVersion(),
                     trail.getForkedFrom() != null ? trail.getForkedFrom().getId() : null, items));
         }
+        // Frozen legacy format: snapshots keep tags as a CSV string forever (historical JSON
+        // already on disk is in this shape), fed here from the live tag catalog at publish time.
         ProjectSnapshotData data = new ProjectSnapshotData(ProjectSnapshotData.CURRENT_SCHEMA_VERSION,
                 project.getId(), project.getTitle(), project.getDescription(),
-                project.getVisibility(), project.getThumbnail(), project.getTags(), trails);
+                project.getVisibility(), project.getThumbnail(), String.join(",", liveTagNames(project)), trails);
 
         ProjectSnapshot snapshot = new ProjectSnapshot();
         snapshot.setProject(project);
@@ -768,8 +772,12 @@ public class ProjectService {
 
     public List<ProjectFeedItemDTO> getPublishedFeed(String query, String sort, User requester) {
         String q = query == null ? "" : query.trim().toLowerCase();
-        List<Project> published = projectRepository.findByVisibilityOrderByModifiedDateDesc("published").stream()
-                .filter(project -> q.isEmpty() || matchesSearch(project, q))
+        List<Project> allPublished = projectRepository.findByVisibilityOrderByModifiedDateDesc("published");
+        Map<Long, List<String>> tagNamesByProjectId = q.isEmpty() ? Map.of()
+                : tagNamesGroupedByProjectId(allPublished.stream().map(Project::getId).toList());
+        List<Project> published = allPublished.stream()
+                .filter(project -> q.isEmpty()
+                        || matchesSearch(project, tagNamesByProjectId.getOrDefault(project.getId(), List.of()), q))
                 .toList();
 
         List<ProjectFeedItemDTO> feed = new ArrayList<>(toPublishedFeedItems(published, requester));
@@ -1232,7 +1240,8 @@ public class ProjectService {
 
     private record FeedContext(Map<Long, Long> voteCounts, Map<Long, Long> forkCounts, Map<Long, Long> commentCounts,
                                 Set<Long> votedProjectIds, Set<Long> bookmarkedProjectIds,
-                                Map<Long, ProjectSnapshot> latestPublishByProjectId) {
+                                Map<Long, ProjectSnapshot> latestPublishByProjectId,
+                                Map<Long, List<String>> tagNamesByProjectId) {
         static FeedContext forProjects(
                 List<Project> projects,
                 User requester,
@@ -1241,7 +1250,7 @@ public class ProjectService {
                 ProjectBookmarkRepository bookmarkRepository
         ) {
             List<Long> ids = projects.stream().map(Project::getId).toList();
-            if (ids.isEmpty()) return new FeedContext(Map.of(), Map.of(), Map.of(), Set.of(), Set.of(), Map.of());
+            if (ids.isEmpty()) return new FeedContext(Map.of(), Map.of(), Map.of(), Set.of(), Set.of(), Map.of(), Map.of());
 
             Map<Long, Long> voteCounts = new HashMap<>();
             for (ProjectVoteRepository.ProjectVoteCount row : voteRepository.countGroupedByProjectIdIn(ids)) {
@@ -1257,7 +1266,11 @@ public class ProjectService {
             Set<Long> bookmarkedProjectIds = requester == null
                     ? Set.of()
                     : Set.copyOf(bookmarkRepository.findBookmarkedProjectIds(requester.getId(), ids));
-            return new FeedContext(voteCounts, forkCounts, Map.of(), votedProjectIds, bookmarkedProjectIds, Map.of());
+            Map<Long, List<String>> tagNamesByProjectId = new HashMap<>();
+            for (ProjectRepository.ProjectTagName row : projectRepository.findTagNamesGroupedByProjectIdIn(ids)) {
+                tagNamesByProjectId.computeIfAbsent(row.getProjectId(), k -> new ArrayList<>()).add(row.getTagName());
+            }
+            return new FeedContext(voteCounts, forkCounts, Map.of(), votedProjectIds, bookmarkedProjectIds, Map.of(), tagNamesByProjectId);
         }
 
         static FeedContext forProjects(
@@ -1275,7 +1288,7 @@ public class ProjectService {
             for (CommentRepository.ProjectCommentCount row : commentRepository.countGroupedByProjectIdIn(ids)) {
                 commentCounts.put(row.getProjectId(), row.getCommentCount());
             }
-            return new FeedContext(base.voteCounts(), base.forkCounts(), commentCounts, base.votedProjectIds(), base.bookmarkedProjectIds(), Map.of());
+            return new FeedContext(base.voteCounts(), base.forkCounts(), commentCounts, base.votedProjectIds(), base.bookmarkedProjectIds(), Map.of(), base.tagNamesByProjectId());
         }
 
         // Same as above plus each project's frozen PUBLISH snapshot data — for read paths where
@@ -1296,7 +1309,7 @@ public class ProjectService {
             for (ProjectSnapshot snapshot : snapshotRepository.findLatestPublishByProjectIdIn(ids)) {
                 latestPublish.put(snapshot.getProject().getId(), snapshot);
             }
-            return new FeedContext(base.voteCounts(), base.forkCounts(), base.commentCounts(), base.votedProjectIds(), base.bookmarkedProjectIds(), latestPublish);
+            return new FeedContext(base.voteCounts(), base.forkCounts(), base.commentCounts(), base.votedProjectIds(), base.bookmarkedProjectIds(), latestPublish, base.tagNamesByProjectId());
         }
     }
 
@@ -1314,7 +1327,7 @@ public class ProjectService {
                 project.getOwner().getImageUrl(),
                 project.getOwner().getSelectedBadge(),
                 snapshot != null ? snapshot.thumbnail() : project.getThumbnail(),
-                snapshot != null ? snapshot.tags() : project.getTags(),
+                snapshot != null ? splitLegacySnapshotTags(snapshot.tags()) : ctx.tagNamesByProjectId().getOrDefault(project.getId(), List.of()),
                 project.getModifiedDate(),
                 project.getFirstPublishedDate(),
                 lastPublishedDate,
@@ -1336,7 +1349,7 @@ public class ProjectService {
                 project.getDescription(),
                 ownerUsername,
                 project.getThumbnail(),
-                project.getTags(),
+                ctx.tagNamesByProjectId().getOrDefault(project.getId(), List.of()),
                 project.getModifiedDate(),
                 ctx.voteCounts().getOrDefault(project.getId(), 0L),
                 ctx.votedProjectIds().contains(project.getId()),
@@ -1351,10 +1364,10 @@ public class ProjectService {
         );
     }
 
-    private boolean matchesSearch(Project project, String q) {
+    private boolean matchesSearch(Project project, List<String> tagNames, String q) {
         return containsIgnoreCase(project.getTitle(), q)
                 || containsIgnoreCase(project.getDescription(), q)
-                || containsIgnoreCase(project.getTags(), q);
+                || tagNames.stream().anyMatch(name -> containsIgnoreCase(name, q));
     }
 
     private boolean containsIgnoreCase(String value, String q) {
@@ -1367,7 +1380,9 @@ public class ProjectService {
                 .toList();
     }
 
-    private List<String> splitTags(String tags) {
+    // Legacy format: tags frozen inside old ProjectSnapshot JSON are a comma-separated string.
+    // Only used when reading a snapshot's own tags() field — never for the live Tag catalog.
+    private List<String> splitLegacySnapshotTags(String tags) {
         if (tags == null || tags.isBlank()) return List.of();
         return Arrays.stream(tags.split(","))
                 .map(String::trim)
@@ -1375,12 +1390,36 @@ public class ProjectService {
                 .toList();
     }
 
-    private String normalizeTags(String rawTags) {
-        List<String> tags = splitTags(rawTags == null ? "" : rawTags.toLowerCase())
-                .stream()
+    private List<String> normalizeTagNames(List<String> rawNames) {
+        if (rawNames == null) return List.of();
+        return rawNames.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(String::trim)
+                .map(String::toLowerCase)
+                .filter(name -> !name.isEmpty())
                 .distinct()
                 .toList();
-        return String.join(",", tags);
+    }
+
+    // Reads tag names straight from the in-memory (already-loaded/just-mutated) association —
+    // safe right after tagService.applyProjectTags() in the same transaction, no extra query.
+    private List<String> liveTagNames(Project project) {
+        return project.getProjectTags().stream().map(Tag::getName).sorted().toList();
+    }
+
+    // Batch tag-name resolution for list/feed contexts — never lazy-load projectTags per project.
+    private Map<Long, List<String>> tagNamesGroupedByProjectId(List<Long> projectIds) {
+        Map<Long, List<String>> byProjectId = new HashMap<>();
+        for (ProjectRepository.ProjectTagName row : projectRepository.findTagNamesGroupedByProjectIdIn(projectIds)) {
+            byProjectId.computeIfAbsent(row.getProjectId(), k -> new ArrayList<>()).add(row.getTagName());
+        }
+        return byProjectId;
+    }
+
+    // Single-entity read contexts (e.g. getById) — resolves via the same batch query with one id,
+    // rather than relying on lazy-loading + a transactional boundary that could regress later.
+    private List<String> resolveTagNames(Project project) {
+        return tagNamesGroupedByProjectId(List.of(project.getId())).getOrDefault(project.getId(), List.of());
     }
 
     private PublicItemDTO toPublicItem(TrailItem trailItem, Map<Long, Item> projectItemById,
@@ -1414,21 +1453,26 @@ public class ProjectService {
 
     // ponytail: single-project lookup, fine for create/getById/update call sites.
     // List endpoints must batch via sumBytesGroupedByProjectIdIn / sumContentBytesGroupedByProjectIdIn
-    // instead (see getAllForUser). Total = image bytes + item content bytes (project's own weight).
+    // (and tagNamesGroupedByProjectId) instead (see getAllForUser). Total = image bytes + item
+    // content bytes (project's own weight).
     private ProjectResponseDTO toResponse(Project project) {
-        long bytes = uploadRecordRepository.sumBytesByProjectId(project.getId())
-                + itemRepository.sumContentBytesByProjectId(project.getId());
-        return toResponse(project, bytes);
+        return toResponse(project, resolveTagNames(project));
     }
 
-    private ProjectResponseDTO toResponse(Project project, long storageBytes) {
+    private ProjectResponseDTO toResponse(Project project, List<String> tagNames) {
+        long bytes = uploadRecordRepository.sumBytesByProjectId(project.getId())
+                + itemRepository.sumContentBytesByProjectId(project.getId());
+        return toResponse(project, bytes, tagNames);
+    }
+
+    private ProjectResponseDTO toResponse(Project project, long storageBytes, List<String> tagNames) {
         return new ProjectResponseDTO(
                 projectIdCodec.encode(project.getId()),
                 project.getTitle(),
                 project.getDescription(),
                 project.getVisibility(),
                 project.getThumbnail(),
-                project.getTags(),
+                tagNames,
                 project.getCreationDate(),
                 latestOf(project.getModifiedDate(), project.getLastEditedDate()),
                 storageBytes

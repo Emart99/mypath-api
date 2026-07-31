@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.util.Date;
+import java.util.List;
 
 @Getter
 @Setter
@@ -18,7 +19,7 @@ public class ProjectFeedItemDTO {
     private String ownerAvatar;
     private String ownerBadge;
     private String thumbnail;
-    private String tags;
+    private List<String> tags;
     private Date modifiedDate;
     private Date publishedDate;
     private Date lastPublishedDate;

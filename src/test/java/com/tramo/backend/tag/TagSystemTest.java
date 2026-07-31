@@ -31,11 +31,11 @@ class TagSystemTest extends AbstractIntegrationTest {
         tagSeeder.run(null);
     }
 
-    private void tagProject(User owner, String title, String tags) throws Exception {
+    private void tagProject(User owner, String title, String tag) throws Exception {
         mockMvc.perform(post("/api/project")
                         .header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"title\":\"" + title + "\",\"tags\":\"" + tags + "\"}"))
+                        .content("{\"title\":\"" + title + "\",\"tags\":[\"" + tag + "\"]}"))
                 .andExpect(status().isOk());
     }
 
@@ -76,14 +76,14 @@ class TagSystemTest extends AbstractIntegrationTest {
     void removingTagOnUpdateDecrementsUsageCount() throws Exception {
         User owner = createUser("decrementer");
         String id = postForProjectId(owner, "/api/project", """
-                {"title":"Tagged","tags":"decrement-me"}""");
+                {"title":"Tagged","tags":["decrement-me"]}""");
         assertThat(tagRepository.findByName("decrement-me").orElseThrow().getUsageCount()).isEqualTo(1);
 
         mockMvc.perform(put("/api/project/" + id)
                         .header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"tags":""}"""))
+                                {"tags":[]}"""))
                 .andExpect(status().isOk());
 
         assertThat(tagRepository.findByName("decrement-me").orElseThrow().getUsageCount()).isEqualTo(0);

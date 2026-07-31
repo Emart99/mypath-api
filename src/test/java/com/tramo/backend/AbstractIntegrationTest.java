@@ -11,6 +11,8 @@ import com.tramo.backend.subscription.patreon.PatreonClient;
 import com.tramo.backend.project.entity.Project;
 import com.tramo.backend.project.repository.ProjectRepository;
 import com.tramo.backend.security.jwt.JwtService;
+import com.tramo.backend.tag.entity.Tag;
+import com.tramo.backend.tag.repository.TagRepository;
 import com.tramo.backend.user.Role;
 import com.tramo.backend.user.entity.User;
 import com.tramo.backend.user.repository.UserRepository;
@@ -91,6 +93,9 @@ public abstract class AbstractIntegrationTest {
 
     @Autowired
     protected ProjectRepository projectRepository;
+
+    @Autowired
+    protected TagRepository tagRepository;
 
     @Autowired
     protected ProjectIdCodec projectIdCodec;
@@ -200,10 +205,19 @@ public abstract class AbstractIntegrationTest {
         project.setTitle(title);
         project.setDescription(description);
         project.setVisibility(visibility);
-        project.setTags(tags);
         project.setOwner(owner);
         project.setCreationDate(new Date());
         project.setModifiedDate(new Date());
+        if (tags != null && !tags.isBlank()) {
+            for (String rawName : tags.split(",")) {
+                String name = rawName.trim().toLowerCase();
+                if (name.isEmpty()) continue;
+                Tag tag = tagRepository.findByName(name).orElseGet(() -> tagRepository.save(new Tag(name, false, owner.getId())));
+                tag.setUsageCount(tag.getUsageCount() + 1);
+                tagRepository.save(tag);
+                project.getProjectTags().add(tag);
+            }
+        }
         return projectRepository.save(project);
     }
 }

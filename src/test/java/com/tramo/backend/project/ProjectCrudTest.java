@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -60,10 +61,13 @@ class ProjectCrudTest extends AbstractIntegrationTest {
     @Test
     void createNormalizesTags() throws Exception {
         User owner = createUser("tagger");
-        String id = postForProjectId(owner, "/api/project", """
-                {"title":"Tagged","tags":"Java, SQL , java, "}""");
-
-        assertThat(projectRepository.findById(projectIdCodec.decode(id)).orElseThrow().getTags()).isEqualTo("java,sql");
+        mockMvc.perform(post("/api/project")
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Tagged","tags":["Java", " SQL ", "java", " "]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tags", containsInAnyOrder("java", "sql")));
     }
 
     @Test
@@ -265,11 +269,11 @@ class ProjectCrudTest extends AbstractIntegrationTest {
         // Tags only surface in hot topics once usage crosses the anti-spam threshold (3),
         // so tag it on three real projects through the actual create flow.
         postForProjectId(author, "/api/project", """
-                {"title":"Tagged 1","tags":"popular"}""");
+                {"title":"Tagged 1","tags":["popular"]}""");
         postForProjectId(author, "/api/project", """
-                {"title":"Tagged 2","tags":"popular"}""");
+                {"title":"Tagged 2","tags":["popular"]}""");
         postForProjectId(author, "/api/project", """
-                {"title":"Tagged 3","tags":"popular"}""");
+                {"title":"Tagged 3","tags":["popular"]}""");
 
         mockMvc.perform(get("/api/public/tags"))
                 .andExpect(status().isOk())

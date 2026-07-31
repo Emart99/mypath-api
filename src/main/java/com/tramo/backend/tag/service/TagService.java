@@ -75,13 +75,16 @@ public class TagService {
         return rawName == null ? "" : rawName.trim().toLowerCase();
     }
 
-    /** Reuses an existing tag if the (normalized) name matches; only creates a new row - rate limited - when there's no match. */
+    /**
+     * Reuses an existing tag if the (normalized) name matches; only creates a new row - rate limited -
+     * when there's no match. Always re-fetches from the repository rather than returning a Tag straight
+     * out of tagCache: the cache is shared across requests/threads, and a JPA entity instance must never
+     * be attached to more than one transaction/session at a time (causes lost-update/stale-state errors
+     * under concurrent writes to the same tag).
+     */
     private Tag resolveOrCreate(String rawName, Long userId) {
         String name = normalize(rawName);
-        Tag existing = tagCache.all().stream()
-                .filter(tag -> tag.getName().equals(name))
-                .findFirst()
-                .orElseGet(() -> tagRepository.findByName(name).orElse(null));
+        Tag existing = tagRepository.findByName(name).orElse(null);
         if (existing != null) {
             return existing;
         }
