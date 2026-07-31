@@ -161,7 +161,7 @@ class CommentTest extends AbstractIntegrationTest {
     void listCommentsQueryCountDoesNotScaleWithCommentCount() throws Exception {
         User owner = createUser("cqcowner");
         Project project = createProject(owner, "Busy thread", "published", "A description", null);
-        // Distinct authors so a per-comment author lookup would show up as N+1.
+        
         postForId(createUser("cqcfan0"), "/api/project/" + pid(project) + "/comments", """
                 {"content":"Comment 0"}""");
 

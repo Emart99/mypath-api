@@ -21,10 +21,10 @@ public class ProjectSnapshot {
     @JoinColumn(name = "project_id")
     private Project project;
 
-    // "PUBLISH" or "FORK" — which action produced this snapshot
+    
     private String trigger;
 
-    // Sequential per-project version number (v1, v2, ...) — only set for PUBLISH; null for FORK.
+    
     private Integer version;
 
     @Column(columnDefinition = "TEXT")

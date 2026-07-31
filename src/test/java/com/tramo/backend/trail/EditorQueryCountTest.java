@@ -9,9 +9,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Guards the editor read endpoints (trails/items/associations of a project the
-// requester owns) against N+1: the query count must not grow with the number of
-// rows returned. Same statistics-based approach as project/QueryCountTest.
+
+
+
 class EditorQueryCountTest extends AbstractIntegrationTest {
 
     private long createTrail(User owner, Project project, String title) throws Exception {

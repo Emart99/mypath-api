@@ -63,7 +63,7 @@ public class SubscriptionService {
         return isSupporter(user) ? supporterStorageBytes : freeStorageBytes;
     }
 
-    /** Blocks new uploads past quota; never touches existing content. */
+    
     public void assertUploadAllowed(User user, long contentBytes) {
         long used = uploadRecordRepository.sumBytesByUserId(user.getId());
         long quota = storageQuotaBytes(user);
@@ -83,8 +83,8 @@ public class SubscriptionService {
                 -1);
     }
 
-    // Real Patreon plan row, lazily created once and reused — Plan/Payment were unused
-    // scaffolding until this integration started populating them.
+    
+    
     @Transactional
     public Plan findOrCreateSupporterPlan() {
         return planRepository.findByName(PATREON_PLAN_NAME)
@@ -96,8 +96,8 @@ public class SubscriptionService {
                 });
     }
 
-    // Shared by mockUpgrade (dev/testing), the Patreon OAuth callback, and the Patreon
-    // webhook — the only three places a subscription should ever turn on.
+    
+    
     @Transactional
     public void activateSupporterSubscription(User user, Plan plan) {
         if (isSupporter(user)) {
@@ -122,7 +122,7 @@ public class SubscriptionService {
                 });
     }
 
-    // Mock for dev/testing without a real Patreon pledge — no Plan attached.
+    
     @Transactional
     public SubscriptionStatusDTO mockUpgrade(User user) {
         activateSupporterSubscription(user, null);

@@ -99,7 +99,7 @@ public class ItemService {
         return toResponse(item);
     }
 
-    // Create a "loose" item that belongs to the project but no trail.
+    
     public ItemResponseDTO createLoose(Long projectId, ItemRequestDTO request, User requester) {
         if (request.getTitle() == null || request.getTitle().isBlank()) {
             throw new IllegalArgumentException("Title is required");
@@ -150,7 +150,7 @@ public class ItemService {
         );
     }
 
-    // "blaze": set a step's annotation and the association used to reach it.
+    
     @Transactional
     public void updateStep(Long trailId, Long itemId, String annotation, Long associationId, User requester) {
         trailService.getOwnedTrail(trailId, requester);
@@ -165,7 +165,7 @@ public class ItemService {
         } else {
             Association association = itemLinkRepository.findById(associationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Association not found"));
-            // The association must originate from an item the requester owns.
+            
             getOwnedItem(association.getSourceItem().getId(), requester);
             step.setAssociation(association);
         }
@@ -244,8 +244,8 @@ public class ItemService {
         return newUrls;
     }
 
-    // Reconcile ItemImageReference rows with the item's current content, replacing the
-    // old LIKE-scan-over-prose check with an indexed exact-match lookup.
+    
+    
     private void resyncImageReferences(Item item, Set<String> newUrls) {
         itemImageReferenceRepository.deleteByItemId(item.getId());
         for (String url : newUrls) {
@@ -302,9 +302,9 @@ public class ItemService {
                 .findFirst()
                 .ifPresent(trailItemRepository::delete);
 
-        // Loose-capable items (with a project) stay; if this was their last
-        // trail they surface in Unfiled. Legacy items (no project) with no
-        // remaining trail are deleted.
+        
+        
+        
         if (trailItemRepository.findByItemId(item.getId()).isEmpty()) {
             if (item.getProject() == null) {
                 deleteItemCompletely(item);
@@ -315,11 +315,11 @@ public class ItemService {
         }
     }
 
-    // Create a typed association from an item to another item or a whole trail ("tie").
+    
     public void tie(Long sourceId, AssociationType type, AssociationTargetType targetType,
                     Long targetId, User requester) {
         Item source = getOwnedItem(sourceId, requester);
-        // Validate the target exists and the requester owns it.
+        
         String targetTitle = resolveOwnedTargetTitle(targetType, targetId, requester);
         if (targetType == AssociationTargetType.ITEM && sourceId.equals(targetId)) {
             throw new IllegalArgumentException("An item cannot be tied to itself");
@@ -341,20 +341,20 @@ public class ItemService {
         itemLinkRepository.save(association);
     }
 
-    // Remove an association ("untie").
+    
     public void untie(Long sourceId, AssociationTargetType targetType, Long targetId, User requester) {
         getOwnedItem(sourceId, requester);
         itemLinkRepository.findBySourceItemIdAndTargetTypeAndTargetId(sourceId, targetType, targetId)
                 .ifPresent(itemLinkRepository::delete);
     }
 
-    // Outgoing associations of an item, with the resolved target title.
+    
     public List<AssociationDTO> getAssociations(Long id, User requester) {
         Item item = getOwnedItem(id, requester);
         List<Association> associations = itemLinkRepository.findBySourceItemId(item.getId());
 
-        // Batch the title lookups by target type so the count is constant (2 queries)
-        // instead of one findById per association (N+1).
+        
+        
         Map<Long, String> itemTitles = titlesByIdForType(associations, AssociationTargetType.ITEM,
                 itemRepository::findIdTitleByIdIn);
         Map<Long, String> trailTitles = titlesByIdForType(associations, AssociationTargetType.TRAIL,
@@ -385,7 +385,7 @@ public class ItemService {
                 .collect(Collectors.toMap(row -> (Long) row[0], row -> (String) row[1]));
     }
 
-    // Validates ownership of the target and returns its title, or null if it doesn't exist.
+    
     private String resolveOwnedTargetTitle(AssociationTargetType targetType, Long targetId, User requester) {
         if (targetType == AssociationTargetType.TRAIL) {
             return trailService.getOwnedTrail(targetId, requester).getTitle();

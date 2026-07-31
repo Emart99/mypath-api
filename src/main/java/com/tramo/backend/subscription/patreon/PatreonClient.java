@@ -28,7 +28,7 @@ public class PatreonClient {
     public record PatreonTokens(String accessToken, String refreshToken) {
     }
 
-    // patronStatus is null/"active_patron"/"declined_patron"/"former_patron" per Patreon's API.
+    
     public record PatreonIdentity(String patreonUserId, boolean activePatron) {
     }
 
@@ -83,9 +83,9 @@ public class PatreonClient {
     public PatreonIdentity fetchIdentity(String accessToken) {
         IdentityResponse response;
         try {
-            // No sparse fieldset param here (Patreon's API rejects a hand-encoded
-            // "fields[member]" query param — bracket encoding is finicky and we don't
-            // need to fight it since patron_status comes back in the default response).
+            
+            
+            
             response = restClient.get()
                     .uri("/api/oauth2/v2/identity?include=memberships")
                     .headers(headers -> headers.setBearerAuth(accessToken))
@@ -104,9 +104,9 @@ public class PatreonClient {
         return new PatreonIdentity(response.data().id(), activePatron);
     }
 
-    // Surfaces Patreon's actual error response body (e.g. "redirect_uri_mismatch",
-    // "invalid_client") instead of just "4xx/5xx" — this is what actually diagnoses
-    // OAuth setup problems in the logs.
+    
+    
+    
     private static String describe(RestClientException ex) {
         if (ex instanceof RestClientResponseException responseEx) {
             return responseEx.getStatusCode() + " " + responseEx.getResponseBodyAsString();

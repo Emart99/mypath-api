@@ -2,7 +2,7 @@ package com.tramo.backend.project.snapshot;
 
 import java.util.List;
 
-// Plain nested tree serialized to JSON for ProjectSnapshot.content — not an API DTO.
+
 public record ProjectSnapshotData(
         Integer schemaVersion,
         Long projectId,
@@ -23,7 +23,7 @@ public record ProjectSnapshotData(
                             String annotation, Long associationId, List<AssociationData> associations) {
     }
 
-    // The item's own outgoing link (from -> target), not the step's "arrived via" pointer (see ItemData.associationId).
+    
     public record AssociationData(Long id, String type, String targetType, Long targetId, String targetTitle) {
     }
 }

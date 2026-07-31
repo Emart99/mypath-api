@@ -245,16 +245,16 @@ public class ProjectService {
         if ("published".equals(request.getVisibility())) {
             checkAndAwardBadges(project.getOwner());
             if (!"published".equals(previousVisibility)) {
-                // ponytail: publishing the project bumps every trail's version.
-                // Move this to a per-trail publish if that granularity is ever added.
+                
+                
                 for (Trail trail : trailRepository.findByProjectId(project.getId())) {
                     trail.setVersion(trail.getVersion() + 1);
                     trailRepository.save(trail);
                 }
                 createSnapshot(project, "PUBLISH");
             }
-            // first-ever publish only — republishing after a temporary private is not news
-            // (deliberate re-announcement is what SHARE is for)
+            
+            
             if (!"published".equals(previousVisibility) && firstPublish) {
                 notifyFollowers(project.getOwner(), "PUBLISH", project);
             }
@@ -320,7 +320,7 @@ public class ProjectService {
             itemLinkRepository.deleteByTargetTypeAndTargetId(AssociationTargetType.TRAIL, trail.getId());
             trailRepository.delete(trail);
         }
-        // Any remaining items of this project (loose or otherwise) — remove them and their links.
+        
         for (com.tramo.backend.trail.entity.Item item : itemRepository.findByProjectId(id)) {
             itemLinkRepository.deleteBySourceItemId(item.getId());
             itemLinkRepository.deleteByTargetTypeAndTargetId(AssociationTargetType.ITEM, item.getId());
@@ -390,8 +390,8 @@ public class ProjectService {
     private void forkFromLiveTables(Project fork, Long sourceProjectId) {
         Map<Long, Item> itemCopies = new HashMap<>();
         Map<Long, Trail> trailCopies = new HashMap<>();
-        // Track source→copy step pairs so we can wire each step's association after
-        // the associations themselves have been copied.
+        
+        
         List<TrailItem> sourceSteps = new ArrayList<>();
         List<TrailItem> copiedSteps = new ArrayList<>();
         for (Trail sourceTrail : trailRepository.findByProjectId(sourceProjectId)) {
@@ -420,9 +420,9 @@ public class ProjectService {
             }
         }
 
-        // Copy associations, remapping polymorphic targets to their fork copies.
-        // Associations pointing outside the snapshot are dropped. Keep old→new so
-        // steps can re-point their association below.
+        
+        
+        
         Map<Long, Association> assocCopies = new HashMap<>();
         for (Long sourceItemId : itemCopies.keySet()) {
             for (Association assoc : itemLinkRepository.findBySourceItemId(sourceItemId)) {
@@ -448,7 +448,7 @@ public class ProjectService {
             }
         }
 
-        // Re-point each copied step at the copied association it used (drop if not copied).
+        
         for (int i = 0; i < sourceSteps.size(); i++) {
             Association srcAssoc = sourceSteps.get(i).getAssociation();
             if (srcAssoc == null) continue;
@@ -558,13 +558,13 @@ public class ProjectService {
     private void createSnapshot(Project project, String trigger) {
         List<Trail> projectTrails = trailRepository.findByProjectId(project.getId());
         List<Long> trailIds = projectTrails.stream().map(Trail::getId).toList();
-        // One batched query for every step across every trail — avoids a per-trail round trip.
+        
         Map<Long, List<TrailItem>> membershipsByTrailId = trailIds.isEmpty() ? Map.of()
                 : trailItemRepository.findByTrailIdInWithItemContentAndAssociation(trailIds).stream()
                         .collect(Collectors.groupingBy(ti -> ti.getTrail().getId(), LinkedHashMap::new, Collectors.toList()));
 
-        // Item id -> Item, and each item's OUTGOING links — same shape as getPublicProject's
-        // toPublicItem, batched once across the whole project instead of per item.
+        
+        
         Map<Long, Item> itemById = membershipsByTrailId.values().stream()
                 .flatMap(List::stream)
                 .collect(Collectors.toMap(ti -> ti.getItem().getId(), TrailItem::getItem, (a, b) -> a));
@@ -592,8 +592,8 @@ public class ProjectService {
                     trail.getVisibility(), trail.getVersion(),
                     trail.getForkedFrom() != null ? trail.getForkedFrom().getId() : null, items));
         }
-        // Frozen legacy format: snapshots keep tags as a CSV string forever (historical JSON
-        // already on disk is in this shape), fed here from the live tag catalog at publish time.
+        
+        
         ProjectSnapshotData data = new ProjectSnapshotData(ProjectSnapshotData.CURRENT_SCHEMA_VERSION,
                 project.getId(), project.getTitle(), project.getDescription(),
                 project.getVisibility(), project.getThumbnail(), String.join(",", liveTagNames(project)), trails);
@@ -609,9 +609,9 @@ public class ProjectService {
         projectSnapshotRepository.save(snapshot);
     }
 
-    // Every published project is expected to have a PUBLISH snapshot (createSnapshot fires on
-    // every publish transition) — this covers the one gap: projects published before that existed.
-    // Called once at boot by ProjectSnapshotBackfillRunner; safe to call repeatedly (idempotent).
+    
+    
+    
     @Transactional
     public void backfillMissingPublishSnapshots() {
         Set<Long> alreadySnapshotted = Set.copyOf(projectSnapshotRepository.findProjectIdsWithPublishSnapshot());
@@ -682,9 +682,9 @@ public class ProjectService {
             }
         }
 
-        // Published projects should always have a PUBLISH snapshot (createSnapshot fires on every
-        // publish, and ProjectSnapshotBackfillRunner covers anything published before that existed)
-        // — but fall back to live content if one somehow doesn't exist yet, rather than 500ing.
+        
+        
+        
         Optional<ProjectSnapshot> snapshotOpt = "published".equals(project.getVisibility())
                 ? projectSnapshotRepository.findLatestPublishByProjectIdIn(List.of(id)).stream().findFirst()
                 : Optional.empty();
@@ -707,7 +707,7 @@ public class ProjectService {
                     ))
                     .toList();
         } else {
-            // Unlisted, or a published project with no snapshot yet: live content.
+            
             List<Trail> projectTrails = trailRepository.findByProjectId(id);
             List<TrailItem> allTrailItems = projectTrails.isEmpty()
                     ? List.of()
@@ -715,9 +715,9 @@ public class ProjectService {
             Map<Long, List<TrailItem>> itemsByTrailId = allTrailItems.stream()
                     .collect(Collectors.groupingBy(trailItem -> trailItem.getTrail().getId()));
 
-            // Item ids in scope for this project, used both as the association-target
-            // whitelist (no leaking titles from other projects) and as the title source
-            // for those targets (no extra query needed — we already loaded these items).
+            
+            
+            
             Map<Long, Item> projectItemById = allTrailItems.stream()
                     .collect(Collectors.toMap(ti -> ti.getItem().getId(), TrailItem::getItem, (a, b) -> a));
             Map<Long, List<Association>> outgoingByItemId = projectItemById.isEmpty()
@@ -1225,8 +1225,8 @@ public class ProjectService {
         return projects.stream().map(project -> toFeedItem(project, ctx)).toList();
     }
 
-    // Same as toFeedItems, but for lists already filtered to visibility="published" — shows
-    // each project's frozen snapshot content instead of live edits.
+    
+    
     private List<ProjectFeedItemDTO> toPublishedFeedItems(List<Project> projects, User requester) {
         FeedContext ctx = FeedContext.forPublishedProjects(projects, requester, projectRepository, projectVoteRepository,
                 projectBookmarkRepository, commentRepository, projectSnapshotRepository);
@@ -1291,8 +1291,8 @@ public class ProjectService {
             return new FeedContext(base.voteCounts(), base.forkCounts(), commentCounts, base.votedProjectIds(), base.bookmarkedProjectIds(), Map.of(), base.tagNamesByProjectId());
         }
 
-        // Same as above plus each project's frozen PUBLISH snapshot data — for read paths where
-        // every project passed in is already known to be published (Explore, profile "published").
+        
+        
         static FeedContext forPublishedProjects(
                 List<Project> projects,
                 User requester,
@@ -1380,8 +1380,8 @@ public class ProjectService {
                 .toList();
     }
 
-    // Legacy format: tags frozen inside old ProjectSnapshot JSON are a comma-separated string.
-    // Only used when reading a snapshot's own tags() field — never for the live Tag catalog.
+    
+    
     private List<String> splitLegacySnapshotTags(String tags) {
         if (tags == null || tags.isBlank()) return List.of();
         return Arrays.stream(tags.split(","))
@@ -1401,13 +1401,13 @@ public class ProjectService {
                 .toList();
     }
 
-    // Reads tag names straight from the in-memory (already-loaded/just-mutated) association —
-    // safe right after tagService.applyProjectTags() in the same transaction, no extra query.
+    
+    
     private List<String> liveTagNames(Project project) {
         return project.getProjectTags().stream().map(Tag::getName).sorted().toList();
     }
 
-    // Batch tag-name resolution for list/feed contexts — never lazy-load projectTags per project.
+    
     private Map<Long, List<String>> tagNamesGroupedByProjectId(List<Long> projectIds) {
         Map<Long, List<String>> byProjectId = new HashMap<>();
         for (ProjectRepository.ProjectTagName row : projectRepository.findTagNamesGroupedByProjectIdIn(projectIds)) {
@@ -1416,8 +1416,8 @@ public class ProjectService {
         return byProjectId;
     }
 
-    // Single-entity read contexts (e.g. getById) — resolves via the same batch query with one id,
-    // rather than relying on lazy-loading + a transactional boundary that could regress later.
+    
+    
     private List<String> resolveTagNames(Project project) {
         return tagNamesGroupedByProjectId(List.of(project.getId())).getOrDefault(project.getId(), List.of());
     }
@@ -1451,10 +1451,10 @@ public class ProjectService {
         return project;
     }
 
-    // ponytail: single-project lookup, fine for create/getById/update call sites.
-    // List endpoints must batch via sumBytesGroupedByProjectIdIn / sumContentBytesGroupedByProjectIdIn
-    // (and tagNamesGroupedByProjectId) instead (see getAllForUser). Total = image bytes + item
-    // content bytes (project's own weight).
+    
+    
+    
+    
     private ProjectResponseDTO toResponse(Project project) {
         return toResponse(project, resolveTagNames(project));
     }

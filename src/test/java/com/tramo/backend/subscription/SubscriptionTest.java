@@ -54,7 +54,7 @@ class SubscriptionTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.publishesPerWeek").value(-1));
 
         upgrade(user);
-        upgrade(user); // second call is a no-op, not an error
+        upgrade(user); 
 
         mockMvc.perform(get("/api/subscription").header("Authorization", bearer(user)))
                 .andExpect(status().isOk())
@@ -73,7 +73,7 @@ class SubscriptionTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.supporter").value(false));
 
-        // content untouched by downgrade
+        
         mockMvc.perform(get("/api/public/project/" + pid(project)))
                 .andExpect(status().isOk());
     }

@@ -77,7 +77,7 @@ class SnapshotTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content.trails[0].title").value("Trail 0"))
                 .andExpect(jsonPath("$.content.trails[0].items[0].content").value("Hello frozen world"));
 
-        // Editing after publish doesn't change the frozen version.
+        
         mockMvc.perform(put("/api/item/" + itemId + "/content")
                         .header("Authorization", bearer(owner))
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)

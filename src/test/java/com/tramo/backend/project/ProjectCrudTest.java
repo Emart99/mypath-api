@@ -266,8 +266,8 @@ class ProjectCrudTest extends AbstractIntegrationTest {
     @Test
     void publicTagsReturnsHotTopics() throws Exception {
         User author = createUser("tagauthor");
-        // Tags only surface in hot topics once usage crosses the anti-spam threshold (3),
-        // so tag it on three real projects through the actual create flow.
+        
+        
         postForProjectId(author, "/api/project", """
                 {"title":"Tagged 1","tags":["popular"]}""");
         postForProjectId(author, "/api/project", """
@@ -415,7 +415,7 @@ class ProjectCrudTest extends AbstractIntegrationTest {
                         .header("Authorization", bearer(user))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"bio":"New bio","imageUrl":"https://example.com/a.png"}"""))
+                                {"bio":"New bio","imageUrl":"https:
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bio").value("New bio"));
     }

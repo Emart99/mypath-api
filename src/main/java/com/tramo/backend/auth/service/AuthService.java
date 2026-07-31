@@ -253,8 +253,8 @@ public class AuthService {
 
     }
 
-    // dontRollbackOn so the reuse-detection cleanup (deleteByUserId) commits
-    // even though we throw InvalidTokenException on the same path.
+    
+    
     @Transactional(dontRollbackOn = InvalidTokenException.class)
     public AuthResponse refresh(RefreshTokenRequestDTO request) {
         RefreshToken refreshToken = refreshTokenRepository
@@ -262,7 +262,7 @@ public class AuthService {
                 .orElseThrow(() -> new InvalidTokenException("Invalid refresh token"));
 
         if (refreshToken.isRevoked()) {
-            // an already-rotated token presented again ⇒ likely theft; drop the whole chain
+            
             refreshTokenRepository.deleteByUserId(refreshToken.getUser().getId());
             throw new InvalidTokenException("Invalid refresh token");
         }
@@ -276,9 +276,9 @@ public class AuthService {
             throw new InvalidTokenException("Invalid refresh token");
         }
 
-        // rotate: revoke the presented token and hand back a fresh one
-        // ponytail: revoked rows linger until their 30-day expiry; add a @Scheduled
-        // purge if the table grows uncomfortably.
+        
+        
+        
         refreshToken.setRevoked(true);
         refreshTokenRepository.save(refreshToken);
 

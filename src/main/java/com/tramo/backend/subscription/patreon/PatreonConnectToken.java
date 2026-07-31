@@ -9,8 +9,8 @@ import lombok.Setter;
 import java.time.Instant;
 import java.util.UUID;
 
-// Maps the OAuth `state` param back to the Tramo user who started the Patreon connect
-// flow — the browser redirect round-trip can't carry the Authorization header.
+
+
 @Entity
 @Getter
 @Setter

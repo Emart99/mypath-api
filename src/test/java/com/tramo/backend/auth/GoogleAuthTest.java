@@ -47,8 +47,8 @@ class GoogleAuthTest extends AbstractIntegrationTest {
     void generatesFallbackUsernameWhenLocalPartIsTooShort() throws Exception {
         stubGoogleToken("ab@gmail.com", "Ab");
 
-        // generateUsernameFromEmail pads "ab" to "abuser" then truncates back to
-        // max(3, original length) = 3 chars, so the real result is "abu", not "abuser".
+        
+        
         googleAuth()
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("abu"));

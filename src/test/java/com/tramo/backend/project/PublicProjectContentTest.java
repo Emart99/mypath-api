@@ -15,11 +15,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Covers the fields getPublicProject added this session: trail description/version,
-// per-step annotation/associationId, and — most importantly — that an item's outgoing
-// associations are filtered to targets within the SAME project before going public
-// (an association can legally point at an item in another of the owner's projects;
-// leaking that target's title publicly would be a privacy bug).
+
+
+
+
+
 class PublicProjectContentTest extends AbstractIntegrationTest {
 
     private long createTrail(User owner, Project project, String title) throws Exception {
@@ -67,7 +67,7 @@ class PublicProjectContentTest extends AbstractIntegrationTest {
                         .content("{\"annotation\":\"because A leads here\",\"associationId\":" + assocId + "}"))
                 .andExpect(status().isNoContent());
 
-        // A cross-project tie: same owner, a different (unrelated) project's item.
+        
         Project otherProject = createProject(owner, "Unrelated", "private");
         long otherTrailId = createTrail(owner, otherProject, "Other trail");
         long itemC = createItem(owner, otherTrailId, "Secret item C");

@@ -160,8 +160,8 @@ class TrailItemTest extends AbstractIntegrationTest {
         mockMvc.perform(delete("/api/trail/" + trailId).header("Authorization", bearer(owner)))
                 .andExpect(status().isNoContent());
 
-        // The item belongs to the project, so deleting its only trail keeps it —
-        // it surfaces in Unfiled rather than being destroyed.
+        
+        
         assertThat(itemRepository.findById(itemId)).isPresent();
         assertThat(itemRepository.findById(itemId).orElseThrow().getUnfiled()).isTrue();
         assertThat(trailItemRepository.findByItemId(itemId)).isEmpty();
@@ -229,7 +229,7 @@ class TrailItemTest extends AbstractIntegrationTest {
         long trailId = createTrail(owner, project, "Weighed trail");
         long itemId = createItem(owner, trailId, "Draft");
 
-        // café has a multi-byte UTF-8 character (é = 2 bytes) — proves byte length, not char length.
+        
         String content = "café";
         mockMvc.perform(put("/api/item/" + itemId + "/content")
                         .header("Authorization", bearer(owner))
@@ -349,7 +349,7 @@ class TrailItemTest extends AbstractIntegrationTest {
         assertThat(trailItemRepository.findByItemId(itemId)).hasSize(1);
         assertThat(itemRepository.findById(itemId)).isPresent();
 
-        // Detaching the last trail keeps the project-owned item and marks it Unfiled.
+        
         mockMvc.perform(delete("/api/trail/" + trail2 + "/item/" + itemId).header("Authorization", bearer(owner)))
                 .andExpect(status().isNoContent());
         assertThat(trailItemRepository.findByItemId(itemId)).isEmpty();
@@ -373,7 +373,7 @@ class TrailItemTest extends AbstractIntegrationTest {
         long itemB = createItem(owner, trailId, "B");
 
         tie(owner, itemA, "RELATED", "ITEM", itemB).andExpect(status().isNoContent());
-        tie(owner, itemA, "RELATED", "ITEM", itemB).andExpect(status().isNoContent()); // idempotent
+        tie(owner, itemA, "RELATED", "ITEM", itemB).andExpect(status().isNoContent()); 
 
         assertThat(itemLinkRepository.count()).isEqualTo(1);
 
@@ -384,7 +384,7 @@ class TrailItemTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$[0].type").value("RELATED"))
                 .andExpect(jsonPath("$[0].targetTitle").value("B"));
 
-        // directional: B has no outgoing association back to A
+        
         mockMvc.perform(get("/api/item/" + itemB + "/association").header("Authorization", bearer(owner)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
@@ -460,7 +460,7 @@ class TrailItemTest extends AbstractIntegrationTest {
 
         assertThat(itemLinkRepository.count()).isEqualTo(1);
         postForProjectId(forker, "/api/project/" + pid(source) + "/fork", "");
-        // the fork snapshot duplicates the association onto the copied items
+        
         assertThat(itemLinkRepository.count()).isEqualTo(2);
     }
 
@@ -500,7 +500,7 @@ class TrailItemTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String assocId = JsonPath.read(assocResponse, "$[0].id");
 
-        // mark that item B was reached via that association
+        
         blaze(owner, trailId, itemB, "{\"associationId\":" + assocId + "}")
                 .andExpect(status().isNoContent());
 
@@ -603,7 +603,7 @@ class TrailItemTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.title").value("Floating"))
                 .andExpect(jsonPath("$.unfiled").value(true));
 
-        // Both trail-bound and loose items belong to the project and are listed together.
+        
         long trailId = createTrail(owner, project, "T");
         createItem(owner, trailId, "In a trail");
 

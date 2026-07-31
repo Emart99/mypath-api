@@ -15,8 +15,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Signs payloads the same way Patreon does (HMAC-MD5, hex-encoded) so these tests don't
-// depend on Patreon being able to reach the app — see PatreonWebhookController.
+
+
 class PatreonWebhookTest extends AbstractIntegrationTest {
 
     private String sign(String body) throws Exception {

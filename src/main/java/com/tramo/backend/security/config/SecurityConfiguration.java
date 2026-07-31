@@ -42,8 +42,8 @@ public class SecurityConfiguration {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authRequest ->
                         authRequest
-                                // Narrower than /api/auth/** below: this one endpoint links an
-                                // already-authenticated Tramo user to Patreon, unlike the rest of /api/auth.
+                                
+                                
                                 .requestMatchers("/api/auth/patreon/connect").authenticated()
                                 .requestMatchers("/api/auth/**").permitAll()
                                 .requestMatchers("/api/public/**").permitAll()

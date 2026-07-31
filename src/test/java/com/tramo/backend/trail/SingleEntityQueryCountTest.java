@@ -9,10 +9,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Guards the single-entity trail/item/project reads against a future regression
-// (e.g. an eager collection added to the response DTO): query count must stay
-// fixed regardless of how much unrelated sibling data exists around the entity.
-// Same statistics-based approach as EditorQueryCountTest/project/QueryCountTest.
+
+
+
+
 class SingleEntityQueryCountTest extends AbstractIntegrationTest {
 
     private long createTrail(User owner, Project project, String title) throws Exception {

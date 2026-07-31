@@ -97,8 +97,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
         Long getForkCount();
     }
 
-    // Batch tag-name lookup for response-building: never lazy-load Project.projectTags for
-    // a list of projects (N+1 risk with open-in-view=false) — resolve everything through this.
+    
+    
     @Query("SELECT p.id AS projectId, t.name AS tagName FROM Project p JOIN p.projectTags t WHERE p.id IN :projectIds")
     List<ProjectTagName> findTagNamesGroupedByProjectIdIn(@Param("projectIds") List<Long> projectIds);
 

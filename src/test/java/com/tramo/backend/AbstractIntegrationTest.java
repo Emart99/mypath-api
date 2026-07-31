@@ -108,8 +108,8 @@ public abstract class AbstractIntegrationTest {
         void run() throws Exception;
     }
 
-    // Runs the call and returns how many JDBC statements Hibernate prepared for it.
-    // Used by N+1 guards: assert the count is the same for a small and a large dataset.
+    
+    
     protected long queryCount(HttpCall call) throws Exception {
         Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         statistics.clear();

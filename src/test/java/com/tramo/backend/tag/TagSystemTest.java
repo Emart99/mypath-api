@@ -25,7 +25,7 @@ class TagSystemTest extends AbstractIntegrationTest {
     @Autowired
     TagSeeder tagSeeder;
 
-    // AbstractIntegrationTest truncates every table before each test; the seeder otherwise only runs once at boot.
+    
     @BeforeEach
     void reseedTags() {
         tagSeeder.run(null);

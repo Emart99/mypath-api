@@ -18,7 +18,7 @@ public class Subscription {
     private Long id;
     private Date startDate;
     private Date endDate;
-    private String status;  // ACTIVE | CANCELED
+    private String status;  
     @ManyToOne
     @JoinColumn(name = "user_id")
     private User user;

@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.List;
 
-/** Holds every tag row in memory so listing/autocomplete never hits the DB. TTL is a fallback net; writes call invalidate() directly. */
+
 @Component
 public class TagCache {
 

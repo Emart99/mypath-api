@@ -36,7 +36,7 @@ public class ItemController {
         return ResponseEntity.ok(itemService.create(trailId, request, user));
     }
 
-    // Loose items — belong to the project, not to any trail.
+    
     @PostMapping("/project/{projectId}/item")
     public ResponseEntity<ItemResponseDTO> createLoose(@PathVariable String projectId, @Valid @RequestBody ItemRequestDTO request,
                                                        @AuthenticationPrincipal User user) {
@@ -89,7 +89,7 @@ public class ItemController {
         return ResponseEntity.noContent().build();
     }
 
-    // "blaze": set a step's annotation + which association was used to reach it.
+    
     @PutMapping("/trail/{trailId}/item/{itemId}")
     public ResponseEntity<Void> updateStep(@PathVariable Long trailId, @PathVariable Long itemId,
                                            @RequestBody StepUpdateRequestDTO request,

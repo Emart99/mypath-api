@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import java.util.Date;
 
-/** One row per R2 object, written at presign time — powers per-user storage quotas. */
+
 @Entity
 @Getter @Setter
 @NoArgsConstructor

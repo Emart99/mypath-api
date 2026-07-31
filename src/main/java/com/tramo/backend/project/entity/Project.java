@@ -34,7 +34,7 @@ public class Project {
     private Date creationDate;
     private Date modifiedDate;
     private Date lastEditedDate;
-    // null = never been published; PUBLISH follower notification fires only when stamping this
+    
     private Date firstPublishedDate;
 
     @Column(columnDefinition = "bigint default 0")
@@ -54,9 +54,9 @@ public class Project {
     @OneToMany(mappedBy = "project")
     private List<Trail> trails;
 
-    // Normalized tag system (see com.tramo.backend.tag) — the single source of truth for
-    // a project's tags. Never lazy-load this for response-building; resolve names via
-    // ProjectRepository.findTagNamesGroupedByProjectIdIn instead (see ProjectService).
+    
+    
+    
     @ManyToMany
     @JoinTable(name = "project_tag",
             joinColumns = @JoinColumn(name = "project_id"),

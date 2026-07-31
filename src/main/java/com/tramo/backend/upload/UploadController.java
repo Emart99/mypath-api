@@ -92,7 +92,7 @@ public class UploadController {
         return ResponseEntity.ok(new UploadPresignResponseDTO(uploadUrl, publicUrl));
     }
 
-    // Content-addressed keys mean re-uploading identical bytes hits the same key — upsert, never double-count.
+    
     private void recordUpload(User user, Long projectId, String key, long bytes) {
         UploadRecord record = uploadRecordRepository.findByObjectKey(key).orElseGet(() -> {
             UploadRecord fresh = new UploadRecord();

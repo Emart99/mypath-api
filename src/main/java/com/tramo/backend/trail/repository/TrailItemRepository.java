@@ -10,17 +10,17 @@ import java.util.List;
 
 @Repository
 public interface TrailItemRepository extends JpaRepository<TrailItem, Long> {
-    // Secondary id sort: attach sets orderIndex = count, so after a detach two
-    // rows can share an index — without a tiebreak their order flips between
-    // reloads. id asc = attach order, matching the frontend's append.
-    // Join-fetch item, its EAGER content, and the step's association so rendering a
-    // trail's steps is one query instead of N+1 (item + content + association per step).
+    
+    
+    
+    
+    
     @Query("SELECT pi FROM TrailItem pi JOIN FETCH pi.item i LEFT JOIN FETCH i.content " +
             "LEFT JOIN FETCH pi.association WHERE pi.trail.id = :trailId ORDER BY pi.orderIndex ASC, pi.id ASC")
     List<TrailItem> findByTrailIdOrderByOrderIndexAsc(@Param("trailId") Long trailId);
 
-    // Join-fetch trail and its project: callers resolve item ownership and the
-    // owning project via pi.getTrail().getProject(), both now LAZY.
+    
+    
     @Query("SELECT pi FROM TrailItem pi JOIN FETCH pi.trail t LEFT JOIN FETCH t.project WHERE pi.item.id = :itemId")
     List<TrailItem> findByItemId(@Param("itemId") Long itemId);
 
@@ -29,8 +29,8 @@ public interface TrailItemRepository extends JpaRepository<TrailItem, Long> {
     @Query("SELECT pi FROM TrailItem pi JOIN FETCH pi.item i LEFT JOIN FETCH i.content WHERE pi.trail.id IN :trailIds ORDER BY pi.orderIndex ASC, pi.id ASC")
     List<TrailItem> findByTrailIdInWithItemAndContent(@Param("trailIds") List<Long> trailIds);
 
-    // Same as above plus the step's association — used by snapshot-building, which reads both
-    // content and association for every step across every trail in one round trip.
+    
+    
     @Query("SELECT pi FROM TrailItem pi JOIN FETCH pi.item i LEFT JOIN FETCH i.content " +
             "LEFT JOIN FETCH pi.association WHERE pi.trail.id IN :trailIds ORDER BY pi.trail.id ASC, pi.orderIndex ASC, pi.id ASC")
     List<TrailItem> findByTrailIdInWithItemContentAndAssociation(@Param("trailIds") List<Long> trailIds);

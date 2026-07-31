@@ -10,8 +10,8 @@ import java.util.List;
 public interface CommentReportRepository extends JpaRepository<CommentReport, Long> {
     List<CommentReport> findByStatusOrderByCreatedDateDesc(String status);
 
-    // Scalar projection for the admin list — see ProjectReportRepository.findOpenRows.
-    // Columns: reportId, projectId, projectTitle, commentId, commentContent, reporterUsername, reason, status, createdDate.
+    
+    
     @Query("SELECT r.id, p.id, p.title, c.id, c.content, rep.username, r.reason, r.status, r.createdDate " +
             "FROM CommentReport r JOIN r.comment c JOIN c.project p JOIN r.reporter rep " +
             "WHERE r.status = :status ORDER BY r.createdDate DESC")

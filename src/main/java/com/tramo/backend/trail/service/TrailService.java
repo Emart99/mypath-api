@@ -92,18 +92,18 @@ public class TrailService {
             trailItemRepository.delete(membership);
             if (trailItemRepository.findByItemId(item.getId()).isEmpty()) {
                 if (item.getProject() == null) {
-                    // Legacy item with no other trail: delete it and its links.
+                    
                     itemLinkRepository.deleteBySourceItemId(item.getId());
                     itemLinkRepository.deleteByTargetTypeAndTargetId(AssociationTargetType.ITEM, item.getId());
                     itemRepository.delete(item);
                 } else {
-                    // Keep it; it surfaces in Unfiled.
+                    
                     item.setUnfiled(true);
                     itemRepository.save(item);
                 }
             }
         }
-        // Drop associations that pointed at this trail as a whole.
+        
         itemLinkRepository.deleteByTargetTypeAndTargetId(AssociationTargetType.TRAIL, id);
         trailRepository.delete(trail);
     }

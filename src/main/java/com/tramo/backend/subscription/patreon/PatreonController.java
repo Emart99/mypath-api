@@ -23,8 +23,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.UUID;
 
-// Account-linking OAuth, not login: the Tramo user must already be authenticated via
-// /connect; the browser round-trips through Patreon and lands back on /callback.
+
+
 @RestController
 @RequestMapping("/api/auth/patreon")
 public class PatreonController {
@@ -75,8 +75,8 @@ public class PatreonController {
         return Map.of("authorizeUrl", authorizeUrl);
     }
 
-    // Public (matches the Patreon-registered redirect URI); the OAuth `state` is the
-    // real credential here, not the request being authenticated.
+    
+    
     @GetMapping("/callback")
     @Transactional
     public ResponseEntity<Void> callback(@RequestParam(required = false) String code,

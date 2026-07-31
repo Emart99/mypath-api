@@ -13,9 +13,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Explore + the public project page now source published content from the latest PUBLISH
-// snapshot instead of live tables (ProjectService.getPublicProject / toFeedItem), so that
-// editing after publishing doesn't change what's already public until the next publish.
+
+
+
 class PublicSnapshotSourcingTest extends AbstractIntegrationTest {
 
     @Autowired
@@ -80,8 +80,8 @@ class PublicSnapshotSourcingTest extends AbstractIntegrationTest {
     @Test
     void backfillCreatesSnapshotForPreExistingPublishedProject() throws Exception {
         User owner = createUser("snapsrcowner4");
-        // Bypasses the real publish flow entirely — simulates a project published before
-        // snapshots existed, exactly what ProjectSnapshotBackfillRunner is meant to fix.
+        
+        
         Project project = createProject(owner, "Legacy Published", "published", "Legacy description", "tag");
 
         projectService.backfillMissingPublishSnapshots();

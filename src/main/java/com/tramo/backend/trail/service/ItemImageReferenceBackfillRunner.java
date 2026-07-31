@@ -14,8 +14,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.Set;
 
-// One-time backfill of ItemImageReference from existing item content, since ddl-auto
-// doesn't migrate data. Guarded by count() == 0 so it's a no-op after the first boot.
+
+
 @Component
 public class ItemImageReferenceBackfillRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(ItemImageReferenceBackfillRunner.class);

@@ -26,11 +26,11 @@ public class Trail {
     private Date creationDate;
     private Date modifiedDate;
 
-    // Bumped when the owner publishes/iterates, so old versions aren't broken.
+    
     @Column(nullable = false)
     private int version = 1;
 
-    // Lineage: the original trail this one was forked from (null if not a fork).
+    
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "forked_from_trail_id")
     private Trail forkedFrom;

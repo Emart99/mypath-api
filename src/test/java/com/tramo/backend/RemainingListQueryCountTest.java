@@ -10,14 +10,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// N+1 guards for the remaining collection endpoints (everything not already covered
-// by project/QueryCountTest, EditorQueryCountTest, and the comment/notification guards).
-//
-// Two levers, picked per endpoint:
-//  - endpoints that build the whole result in memory (dashboards, feeds, activity,
-//    admin lists) are grown by TOTAL row count.
-//  - endpoints paged by the database only ever materialise `size` rows, so a per-row
-//    N+1 is bounded by the page size, not the total — those are grown by PAGE SIZE.
+
+
+
+
+
+
+
+
 class RemainingListQueryCountTest extends AbstractIntegrationTest {
 
     private void action(User u, String url) throws Exception {
@@ -28,7 +28,7 @@ class RemainingListQueryCountTest extends AbstractIntegrationTest {
         return createProject(owner, title, "published", "A description", tags);
     }
 
-    // ---- endpoints grown by total row count ----
+    
 
     @Test
     void dashboardProjectsQueryCountDoesNotScaleWithProjectCount() throws Exception {
@@ -128,8 +128,8 @@ class RemainingListQueryCountTest extends AbstractIntegrationTest {
         User author = createUser("rlqctags");
         published(author, "Tag 0", "java,testing");
 
-        // Warm the tag cache first: the very first hit after a cold start costs one query
-        // to load it, every hit after that is served from memory - measure both sides warm.
+        
+        
         mockMvc.perform(get("/api/public/tags")).andExpect(status().isOk());
 
         long small = queryCount(() -> mockMvc.perform(get("/api/public/tags"))
@@ -145,7 +145,7 @@ class RemainingListQueryCountTest extends AbstractIntegrationTest {
         assertThat(large).isEqualTo(small);
     }
 
-    // ---- database-paged endpoints grown by page size ----
+    
 
     @Test
     void publicPublishedPageQueryCountDoesNotScaleWithPageSize() throws Exception {

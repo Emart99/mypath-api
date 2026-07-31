@@ -67,9 +67,9 @@ class RefreshAndLogoutTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString()
                 .replaceAll(".*\"refreshToken\":\"([^\"]+)\".*", "$1");
 
-        // presenting the now-revoked original again is treated as theft
+        
         refresh(token.getToken()).andExpect(status().isUnauthorized());
-        // ...and the freshly issued token is revoked along with the rest of the chain
+        
         refresh(newToken).andExpect(status().isUnauthorized());
     }
 

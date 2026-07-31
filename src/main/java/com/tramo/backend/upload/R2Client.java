@@ -98,7 +98,7 @@ public class R2Client {
         String key = url.substring(publicBaseUrl.length() + 1);
         try {
             client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
-            // freed space returns to the owner's storage quota
+            
             uploadRecordRepository.deleteByObjectKey(key);
         } catch (Exception e) {
             log.warn("Failed to delete orphaned R2 object {}", key, e);

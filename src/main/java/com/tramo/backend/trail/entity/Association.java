@@ -20,7 +20,6 @@ public class Association {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long id;
 
-    // The source is always an Item; the target is polymorphic (Item or Trail).
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_item_id")
     private Item sourceItem;

@@ -22,12 +22,12 @@ class NotificationTest extends AbstractIntegrationTest {
     @Autowired
     ProjectService projectService;
 
-    // Publishing via the real update() flow (not the createProject(..., "published", ...) test
-    // helper, which inserts directly) fires the first_publish badge check right away instead of
-    // leaving it to fire lazily on whatever the next checkAndAwardBadges call happens to be —
-    // otherwise the first vote a project ever receives ends up producing a BADGE notification on
-    // top of the UPVOTE one, throwing off the notification-list/unread-count assertions below.
-    // Mark-as-read isn't enough since getNotifications() returns read ones too; delete it outright.
+    
+    
+    
+    
+    
+    
     private Project publishedProject(User owner, String title) throws Exception {
         Project project = createProject(owner, title, "private", "d", null);
         mockMvc.perform(put("/api/project/" + pid(project))
@@ -164,7 +164,7 @@ class NotificationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$[0].latestActorUsername").value("notifpublisher"))
                 .andExpect(jsonPath("$[0].projectTitle").value("Publish me"));
 
-        // re-saving while already published (e.g. renaming) must not re-fire the follower notification
+        
         mockMvc.perform(put("/api/project/" + pid(project))
                         .header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -176,8 +176,8 @@ class NotificationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
 
-        // private -> published again must not re-notify either, even once the first
-        // notification is read (unread-dedup no longer applies): PUBLISH is first-publish-only
+        
+        
         mockMvc.perform(post("/api/notifications/read").header("Authorization", bearer(follower)))
                 .andExpect(status().isOk());
         mockMvc.perform(put("/api/project/" + pid(project))
@@ -205,11 +205,11 @@ class NotificationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/users/legacypublisher/follow").header("Authorization", bearer(follower)))
                 .andExpect(status().isOk());
 
-        // direct DB insert while already published — firstPublishedDate stays null, exactly
-        // like rows published before first-publish tracking existed
+        
+        
         Project project = createProject(owner, "Legacy project", "published", "A description", null);
 
-        // re-saving while published must stamp firstPublishedDate silently, not notify
+        
         mockMvc.perform(put("/api/project/" + pid(project))
                         .header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -221,7 +221,7 @@ class NotificationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
 
-        // and once stamped, a private -> published cycle must not notify either
+        
         mockMvc.perform(put("/api/project/" + pid(project))
                         .header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -313,12 +313,12 @@ class NotificationTest extends AbstractIntegrationTest {
     void listNotificationsQueryCountDoesNotScaleWithNotificationCount() throws Exception {
         User owner = createUser("nqcowner");
 
-        // Each published project voted by a distinct fan is its own UPVOTE notification
-        // row, with a distinct project and latest actor — so a per-row lookup of either
-        // would surface as N+1.
+        
+        
+        
         voteOnFreshProject(owner, 0);
 
-        // Warm up so any one-time badge notification is already materialised in both runs.
+        
         mockMvc.perform(get("/api/notifications").header("Authorization", bearer(owner)))
                 .andExpect(status().isOk());
 

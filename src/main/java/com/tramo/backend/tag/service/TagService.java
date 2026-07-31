@@ -48,7 +48,7 @@ public class TagService {
         return tag.isOfficial() || tag.getUsageCount() >= visibilityThreshold;
     }
 
-    /** Public autocomplete: official tags + user tags that already crossed the visibility threshold. */
+    
     public List<TagDTO> autocomplete(String query, int limit) {
         String q = query == null ? "" : query.trim().toLowerCase();
         return tagCache.all().stream()
@@ -61,7 +61,7 @@ public class TagService {
                 .toList();
     }
 
-    /** Trending tags for Explore: visible tags (official or threshold-crossing), ranked purely by usage. */
+    
     public List<TagDTO> hotTopics(int limit) {
         return tagCache.all().stream()
                 .filter(this::isVisible)
@@ -75,13 +75,13 @@ public class TagService {
         return rawName == null ? "" : rawName.trim().toLowerCase();
     }
 
-    /**
-     * Reuses an existing tag if the (normalized) name matches; only creates a new row - rate limited -
-     * when there's no match. Always re-fetches from the repository rather than returning a Tag straight
-     * out of tagCache: the cache is shared across requests/threads, and a JPA entity instance must never
-     * be attached to more than one transaction/session at a time (causes lost-update/stale-state errors
-     * under concurrent writes to the same tag).
-     */
+    
+
+
+
+
+
+
     private Tag resolveOrCreate(String rawName, Long userId) {
         String name = normalize(rawName);
         Tag existing = tagRepository.findByName(name).orElse(null);
@@ -102,15 +102,15 @@ public class TagService {
             tagCache.invalidate();
             return created;
         } catch (DataIntegrityViolationException e) {
-            // lost a race with a concurrent insert of the same name
+            
             return tagRepository.findByName(name).orElseThrow(() -> e);
         }
     }
 
-    /**
-     * Assigns project.projectTags to match the given raw tag names, resolving/creating tags as needed
-     * and keeping each tag's usage_count in sync (+1 on assign, -1 on removal).
-     */
+    
+
+
+
     public void applyProjectTags(Project project, List<String> rawNames, Long userId) {
         Set<String> targetNames = new HashSet<>();
         for (String rawName : rawNames) {

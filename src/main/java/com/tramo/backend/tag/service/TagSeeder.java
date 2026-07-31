@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/** Seeds the official/base tag set from config on every boot. Idempotent: existing names are left alone (except being marked official). */
+
 @Component
 public class TagSeeder implements ApplicationRunner {
 

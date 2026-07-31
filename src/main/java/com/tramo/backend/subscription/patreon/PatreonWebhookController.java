@@ -23,8 +23,8 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Optional;
 
-// Public endpoint (see SecurityConfiguration /api/webhooks/** permitAll) — the HMAC
-// signature is the only credential; no JWT is expected on inbound Patreon requests.
+
+
 @RestController
 @RequestMapping("/api/webhooks/patreon")
 public class PatreonWebhookController {
@@ -73,7 +73,7 @@ public class PatreonWebhookController {
         return ResponseEntity.ok().build();
     }
 
-    // Patreon signs webhooks with HMAC-MD5 (not SHA), hex-encoded, in X-Patreon-Signature.
+    
     private boolean signatureValid(String rawBody, String signature) {
         try {
             Mac mac = Mac.getInstance("HmacMD5");
@@ -88,8 +88,8 @@ public class PatreonWebhookController {
         }
     }
 
-    // Pledge/member webhook payloads carry `data` = a "member" resource with a
-    // relationship to the patron's Patreon user id.
+    
+    
     private String extractPatreonUserId(String rawBody) {
         try {
             JsonNode root = objectMapper.readTree(rawBody);

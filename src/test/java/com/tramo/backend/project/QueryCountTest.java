@@ -100,9 +100,9 @@ class QueryCountTest extends AbstractIntegrationTest {
 
     @Test
     void explorePageTwoQueryCountDoesNotScaleWithTotalFeedSize() throws Exception {
-        // Seed enough that page 1 is a full page of 10 in both runs (a short final page lets
-        // Spring Data infer "last page" and skip the count query, which would make the query
-        // count differ for a reason unrelated to scaling — keep both runs on the same code trail).
+        
+        
+        
         User author = createUser("qcpageauthor");
         User fan = createUser("qcpagefan");
         for (int i = 0; i < 22; i++) {
